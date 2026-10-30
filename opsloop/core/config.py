@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="OPSLOOP_", env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+psycopg://opsloop:opsloop@localhost:55432/opsloop"
+    prometheus_url: str = "http://localhost:9090"
+    cors_origins: list[str] = ["http://localhost:3000"]
 
 
 @lru_cache

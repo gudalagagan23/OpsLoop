@@ -1,0 +1,45 @@
+# Database watcher (simulated TaskFlow). Thresholds set from measured baselines (docs/DECISIONS.md).
+watcher: database
+version: 1
+service: postgres
+interval_s: 5
+signals:
+  - id: db.query_p95
+    title: "Slow query: {query_name} p95 high"
+    query: 'histogram_quantile(0.95, sum by (le, query_name) (rate(db_query_duration_seconds_bucket{query_name!="health_check"}[1m])))'
+    method: threshold
+    params: {warn: 0.05, crit: 0.25}
+    min_duration_s: 30
+    clear_after_s: 60
+    severity: {warn: S3, crit: S2}
+
+  - id: db.queries_per_request
+    title: "Too many queries per request on {route}"
+    query: 'histogram_quantile(0.95, sum by (le, route) (rate(db_queries_per_request_bucket{route!~"/health|/metrics|unmatched"}[1m])))'
+    method: threshold
+    params: {warn: 10, crit: 50}
+    min_duration_s: 30
+    clear_after_s: 60
+    severity: {warn: S3, crit: S2}
+
+  - id: db.pool_saturation
+    title: "DB connection pool saturated"
+    query: 'max(db_pool_in_use) / max(db_pool_size)'
+    method: threshold
+    params: {warn: 0.8, crit: 0.95}
+    min_duration_s: 20
+    clear_after_s: 60
+    severity: {warn: S2, crit: S1}
+
+  - id: db.pool_timeouts
+    title: "Requests timing out waiting for a DB connection"
+    query: 'sum(rate(db_pool_timeouts_total[1m]))'
+    method: threshold
+    params: {warn: 0.01, crit: 0.1}
+    min_duration_s: 15
+    clear_after_s: 60
+    severity: {warn: S2, crit: S1}
+
+llm_interpretation:
+  when: "anomaly has no matching rule signature"
+  max_calls_per_hour: 10

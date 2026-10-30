@@ -148,6 +148,7 @@ def test_report1_stub_cites_ledger_evidence(db: Session, request: pytest.Fixture
     db.commit()
     assert inc.state == "REPORT1_READY"
     assert report.is_stub
+    assert report.version == 1
     assert report.body["evidence_for"], "Report 1 must cite ledger evidence"
     assert db.execute(select(Report).where(Report.incident_id == inc.id)).scalar_one()
     assert ledger.verify(db).ok

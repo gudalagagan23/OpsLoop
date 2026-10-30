@@ -1,0 +1,45 @@
+# API watcher (simulated TaskFlow). Thresholds set from measured baselines (docs/DECISIONS.md).
+watcher: api
+version: 1
+service: taskflow-api
+interval_s: 5
+signals:
+  - id: api.error_rate
+    title: "API 5xx error rate high"
+    query: '(sum(rate(http_requests_total{status=~"5.."}[1m])) or vector(0)) / sum(rate(http_requests_total[1m]))'
+    method: threshold
+    params: {warn: 0.02, crit: 0.05}
+    min_duration_s: 30
+    clear_after_s: 60
+    severity: {warn: S3, crit: S1}
+
+  - id: api.p95_latency
+    title: "API p95 latency above SLO on {route}"
+    query: 'histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{route!~"/health|/metrics|/auth/login|unmatched"}[1m])))'
+    method: threshold
+    params: {warn: 0.3, crit: 1.0}
+    min_duration_s: 30
+    clear_after_s: 60
+    severity: {warn: S3, crit: S2}
+
+  - id: api.p95_latency_shift
+    title: "API p95 latency shifted from baseline on {route}"
+    query: 'histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{route!~"/health|/metrics|/auth/login|unmatched"}[1m])))'
+    method: ewma
+    params: {alpha: 0.05, k: 4, crit_k: 8, min_samples: 24, floor: 0.05}
+    min_duration_s: 45
+    clear_after_s: 60
+    severity: {warn: S4, crit: S3}
+
+  - id: api.request_rate_drop
+    title: "API request rate dropped"
+    query: 'sum(rate(http_requests_total[1m]))'
+    method: ewma
+    params: {alpha: 0.02, k: 6, crit_k: 10, min_samples: 60, floor: 3, direction: below}
+    min_duration_s: 60
+    clear_after_s: 60
+    severity: {warn: S3, crit: S2}
+
+llm_interpretation:
+  when: "anomaly has no matching rule signature"
+  max_calls_per_hour: 10

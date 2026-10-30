@@ -1,0 +1,6 @@
+# Simulated traffic profile. One simulated day = day_period_s real seconds.
+base_rps: 12
+day_period_s: 1800
+start_phase: 0.4
+night_factor: 0.35
+weekend_factor: 0.6

@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: taskflow-api
+    static_configs:
+      - targets: ["taskflow-api:8080"]

@@ -6,7 +6,7 @@ dashboard and lifecycle can be exercised. The LLM + RAG Investigator replaces it
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from opsloop.core import ledger
@@ -71,8 +71,21 @@ def generate_report1_stub(session: Session, mgr: IncidentManager, incident: Inci
         incident_id=incident.id,
         payload={"report": "report1", "stub": True, "summary": body["summary"]},
     )
+    version = (
+        session.execute(
+            select(func.coalesce(func.max(Report.version), 0)).where(
+                Report.incident_id == incident.id, Report.kind == "report1"
+            )
+        ).scalar_one()
+        + 1
+    )
     report = Report(
-        incident_id=incident.id, kind="report1", body=body, is_stub=True, evidence_id=ev.id
+        incident_id=incident.id,
+        kind="report1",
+        version=version,
+        body=body,
+        is_stub=True,
+        evidence_id=ev.id,
     )
     session.add(report)
     session.add(

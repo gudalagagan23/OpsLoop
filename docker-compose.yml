@@ -1,6 +1,15 @@
-# Stage 0: database + OpsLoop API skeleton.
-# TaskFlow, traffic-gen, prometheus, router and the dashboard are added in later stages.
+# Everything here is simulated: TaskFlow, its tenants, traffic and planted faults.
 name: opsloop
+
+x-python: &python
+  build:
+    context: .
+    dockerfile: docker/python.Dockerfile
+  image: opsloop-python:dev
+
+x-db-env: &db-env
+  OPSLOOP_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-opsloop}:${POSTGRES_PASSWORD:-opsloop}@postgres:5432/${POSTGRES_DB:-opsloop}
+  TASKFLOW_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-opsloop}:${POSTGRES_PASSWORD:-opsloop}@postgres:5432/${POSTGRES_DB:-opsloop}
 
 services:
   postgres:
@@ -9,6 +18,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-opsloop}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opsloop}
       POSTGRES_DB: ${POSTGRES_DB:-opsloop}
+    command: ["postgres", "-c", "max_connections=200"]
     ports:
       # Host port defaults to 55432 to avoid clashing with a locally installed Postgres.
       - "${POSTGRES_HOST_PORT:-55432}:5432"
@@ -21,17 +31,64 @@ services:
       timeout: 3s
       retries: 20
 
-  opsloop-api:
-    build:
-      context: .
-      dockerfile: docker/opsloop-api.Dockerfile
-    environment:
-      OPSLOOP_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-opsloop}:${POSTGRES_PASSWORD:-opsloop}@postgres:5432/${POSTGRES_DB:-opsloop}
-    ports:
-      - "8000:8000"
+  migrate:
+    <<: *python
+    environment: *db-env
+    command: ["alembic", "upgrade", "head"]
     depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
+
+  taskflow-api:
+    <<: *python
+    environment:
+      <<: *db-env
+      TASKFLOW_JWT_SECRET: ${TASKFLOW_JWT_SECRET:-sim-dev-secret-not-for-production}
+      TASKFLOW_VERSION: ${TASKFLOW_VERSION:-1.0.0}
+    command: ["python", "-m", "taskflow.api"]
+    ports:
+      - "8080:8080"
+      # Fault control port: simulation harness only, bound to localhost, never given to agents.
+      - "127.0.0.1:9100:9100"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  traffic-gen:
+    <<: *python
+    environment:
+      TASKFLOW_URL: http://taskflow-api:8080
+      TRAFFIC_PROFILE: /app/taskflow/traffic/profiles/default.yaml
+      TRAFFIC_SEED: ${TRAFFIC_SEED:-42}
+    command: ["python", "-m", "taskflow.traffic.runner"]
+    depends_on:
+      taskflow-api:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - taskflow-api
+
+  opsloop-api:
+    <<: *python
+    environment: *db-env
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status == 200 else 1)"]
       interval: 10s
