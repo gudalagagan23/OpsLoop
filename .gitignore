@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# Node
+node_modules/
+.next/
+
+# Secrets: only .env.example is committed
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Eval output
+eval/results/*
+!eval/results/.gitkeep
+
+# Local assistant pointer (not published)
+CLAUDE.md
+.claude/

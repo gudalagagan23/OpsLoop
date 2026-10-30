@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: opsloop
+          POSTGRES_PASSWORD: opsloop
+          POSTGRES_DB: opsloop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opsloop -d opsloop"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      OPSLOOP_DATABASE_URL: postgresql+psycopg://opsloop:opsloop@localhost:5432/opsloop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Enable pgvector
+        run: psql "postgresql://opsloop:opsloop@localhost:5432/opsloop" -f docker/postgres/init/01-extensions.sql
+      - name: Ruff
+        run: ruff check . && ruff format --check .
+      - name: Mypy
+        run: mypy
+      - name: Tests
+        run: pytest -v
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose up
+        run: docker compose up -d --build --wait --wait-timeout 180
+      - name: Health check
+        run: curl -fsS http://localhost:8000/health
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
