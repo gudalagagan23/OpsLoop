@@ -15,6 +15,7 @@ import time
 import uuid
 from typing import Any
 
+import httpx
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
@@ -33,6 +34,12 @@ from opsloop.core.llm import (
 from opsloop.core.llm_groq import check_required
 
 RAW = "_gemini_part"
+_THINKING = {
+    "minimal": types.ThinkingLevel.MINIMAL,
+    "low": types.ThinkingLevel.LOW,
+    "medium": types.ThinkingLevel.MEDIUM,
+    "high": types.ThinkingLevel.HIGH,
+}
 
 
 def to_function_declarations(tools: list[dict[str, Any]]) -> list[types.Tool]:
@@ -107,7 +114,12 @@ class GeminiLLM:
         if not self.settings.llm_model:
             raise LLMNotConfigured("set OPSLOOP_LLM_MODEL in .env (see .env.example)")
         key = self.settings.gemini_api_key.get_secret_value()
-        self.client = client or (genai.Client(api_key=key) if key else genai.Client())
+        http = types.HttpOptions(timeout=int(self.settings.llm_timeout_s * 1000))
+        self.client = client or (
+            genai.Client(api_key=key, http_options=http) if key else genai.Client(http_options=http)
+        )
+        level = _THINKING.get(self.settings.llm_effort.lower())
+        self.thinking = types.ThinkingConfig(thinking_level=level) if level else None
         self.recorder = recorder
 
     def _usage(self, resp: Any, agent: str, started: float, incident_id: int | None) -> LLMUsage:
@@ -148,7 +160,7 @@ class GeminiLLM:
                 if delay is None or code not in self.RETRYABLE:
                     raise LLMError(f"Gemini API error {code}: {exc}") from exc
                 time.sleep(delay)
-            except OSError as exc:
+            except (OSError, httpx.TransportError) as exc:
                 if delay is None:
                     raise LLMError(f"cannot reach Gemini: {exc}") from exc
                 time.sleep(delay)
@@ -181,6 +193,7 @@ class GeminiLLM:
             response_json_schema=schema,
             max_output_tokens=max_tokens,
             temperature=0,
+            thinking_config=self.thinking,
         )
         resp = self._generate(prompt, config)
         usage = self._usage(resp, agent, started, incident_id)
@@ -211,6 +224,7 @@ class GeminiLLM:
             tools=to_function_declarations(tools),
             max_output_tokens=max_tokens,
             temperature=0,
+            thinking_config=self.thinking,
             # We run the tool loop ourselves; never let the SDK call tools for us.
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )

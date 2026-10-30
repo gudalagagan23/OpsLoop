@@ -55,7 +55,8 @@ class Settings(BaseSettings):
     )
     llm_provider: str = "anthropic"  # anthropic | groq | gemini
     llm_model: str = ""
-    llm_effort: str = "high"
+    llm_effort: str = "high"  # low | medium | high (Gemini: thinking level)
+    llm_timeout_s: float = 240.0  # per request; a stuck call fails and is retried
     llm_input_usd_per_mtok: float = 0.0
     llm_output_usd_per_mtok: float = 0.0
     llm_cache_read_usd_per_mtok: float = 0.0
