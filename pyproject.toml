@@ -60,7 +60,8 @@ ignore = ["E501"]
 "tests/**" = ["S101", "S105"]
 "sandbox_tests/**" = ["S101", "S105", "S608"]
 "opsloop/testloop/reference_fixes.py" = ["S101"]
-"opsloop/sandbox/runner.py" = ["S105", "S607"]  # fixed docker/git CLI; throwaway sandbox DB password
+"opsloop/sandbox/runner.py" = ["S105", "S607"]
+"opsloop/deploy/candidate.py" = ["S607"]  # fixed docker and git CLI calls  # fixed docker/git CLI; throwaway sandbox DB password
 # f-strings there only interpolate the constant schema name; all values are bound parameters.
 "taskflow/api/main.py" = ["S608"]
 "taskflow/api/seed.py" = ["S608"]

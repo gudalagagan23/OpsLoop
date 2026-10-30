@@ -35,3 +35,6 @@ CLAUDE.md
 # Next.js generated
 web/next-env.d.ts
 web/tsconfig.tsbuildinfo
+
+# Candidate deployments built for staged rollout
+.candidates/
