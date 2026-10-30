@@ -133,7 +133,7 @@ class GeminiLLM:
         cost = inp * s.llm_input_usd_per_mtok / 1e6 + out * s.llm_output_usd_per_mtok / 1e6
         usage = LLMUsage(
             agent=agent,
-            model=s.llm_model,
+            model=getattr(self, "served_by", s.llm_model),
             input_tokens=inp,
             output_tokens=out,
             cost_usd=cost,
@@ -146,25 +146,31 @@ class GeminiLLM:
         return usage
 
     RETRYABLE = frozenset({429, 500, 502, 503, 504})
-    BACKOFF_S = (2.0, 5.0, 12.0, 25.0)
+    BACKOFF_S = (3.0,)  # per model: one short retry, then move on to the next model
 
     def _generate(self, contents: Any, config: types.GenerateContentConfig) -> Any:
-        """Call the model, retrying overloads and rate limits with backoff (spikes are brief)."""
-        for delay in (*self.BACKOFF_S, None):
-            try:
-                return self.client.models.generate_content(
-                    model=self.settings.llm_model, contents=contents, config=config
-                )
-            except genai_errors.APIError as exc:
-                code = getattr(exc, "code", None)
-                if delay is None or code not in self.RETRYABLE:
-                    raise LLMError(f"Gemini API error {code}: {exc}") from exc
-                time.sleep(delay)
-            except (OSError, httpx.TransportError) as exc:
-                if delay is None:
-                    raise LLMError(f"cannot reach Gemini: {exc}") from exc
-                time.sleep(delay)
-        raise LLMError("unreachable")  # pragma: no cover
+        """Call the primary model; on overload, retry once and then fall back through
+        OPSLOOP_LLM_FALLBACK_MODELS. Client errors (4xx except 429) fail immediately."""
+        models = [self.settings.llm_model, *self.settings.llm_fallback_models]
+        last: str = ""
+        for model in models:
+            for delay in (*self.BACKOFF_S, None):
+                try:
+                    resp = self.client.models.generate_content(
+                        model=model, contents=contents, config=config
+                    )
+                    self.served_by = model
+                    return resp
+                except genai_errors.APIError as exc:
+                    code = getattr(exc, "code", None)
+                    if code not in self.RETRYABLE:
+                        raise LLMError(f"Gemini API error {code}: {exc}") from exc
+                    last = f"{model}: {code}"
+                except (OSError, httpx.TransportError) as exc:
+                    last = f"{model}: {type(exc).__name__}"
+                if delay is not None:
+                    time.sleep(delay)
+        raise LLMError(f"Gemini API error 503: every model is unavailable (last: {last})")
 
     @staticmethod
     def _finish(resp: Any) -> str:

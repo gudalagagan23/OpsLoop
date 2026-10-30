@@ -33,6 +33,20 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator("llm_fallback_models", mode="before")
+    @classmethod
+    def _fallbacks(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return []
+            return (
+                json.loads(v)
+                if v.startswith("[")
+                else [m.strip() for m in v.split(",") if m.strip()]
+            )
+        return v
+
     @field_validator("api_tokens", mode="before")
     @classmethod
     def _tokens(cls, v: Any) -> Any:
@@ -56,6 +70,8 @@ class Settings(BaseSettings):
     llm_provider: str = "anthropic"  # anthropic | groq | gemini
     llm_model: str = ""
     llm_effort: str = "high"  # low | medium | high (Gemini: thinking level)
+    # Tried in order when the primary model is overloaded (comma-separated or JSON list).
+    llm_fallback_models: Annotated[list[str], NoDecode] = []
     llm_timeout_s: float = 240.0  # per request; a stuck call fails and is retried
     llm_input_usd_per_mtok: float = 0.0
     llm_output_usd_per_mtok: float = 0.0

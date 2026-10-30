@@ -194,12 +194,12 @@ class _Flaky:
 
 def test_overload_is_retried_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("opsloop.core.llm_gemini.time.sleep", lambda _s: None)
-    flaky = _Flaky(2, 503, _resp([_part("ok")]))
+    flaky = _Flaky(1, 503, _resp([_part("ok")]))
     llm = GeminiLLM(Settings(_env_file=None, llm_model="m"), client=SimpleNamespace(models=flaky))
     turn = llm.agent_turn(
         agent="a", system="s", messages=[{"role": "user", "content": "go"}], tools=[]
     )
-    assert turn.text == "ok" and flaky.calls == 3
+    assert turn.text == "ok" and flaky.calls == 2
 
 
 def test_persistent_overload_gives_up_with_a_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -210,7 +210,7 @@ def test_persistent_overload_gives_up_with_a_clear_error(monkeypatch: pytest.Mon
         llm.agent_turn(
             agent="a", system="s", messages=[{"role": "user", "content": "go"}], tools=[]
         )
-    assert flaky.calls == 5
+    assert flaky.calls == 2  # one model configured: first try + one retry
 
 
 def test_client_errors_are_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -222,3 +222,30 @@ def test_client_errors_are_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
             agent="a", system="s", messages=[{"role": "user", "content": "go"}], tools=[]
         )
     assert flaky.calls == 1
+
+
+class _ByModel:
+    def __init__(self, busy: set[str], reply: Any) -> None:
+        self.busy, self.reply, self.models_tried = busy, reply, []
+
+    def generate_content(self, **kw: Any) -> Any:
+        from google.genai import errors
+
+        self.models_tried.append(kw["model"])
+        if kw["model"] in self.busy:
+            raise errors.APIError(503, {"error": {"message": "busy", "status": "UNAVAILABLE"}})
+        return self.reply
+
+
+def test_overloaded_primary_falls_back_to_the_next_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("opsloop.core.llm_gemini.time.sleep", lambda _s: None)
+    fake = _ByModel({"primary"}, _resp([_part("ok")]))
+    settings = Settings(
+        _env_file=None, llm_model="primary", llm_fallback_models="backup-a,backup-b"
+    )
+    llm = GeminiLLM(settings, client=SimpleNamespace(models=fake))
+    turn = llm.agent_turn(
+        agent="a", system="s", messages=[{"role": "user", "content": "go"}], tools=[]
+    )
+    assert turn.text == "ok" and fake.models_tried == ["primary", "primary", "backup-a"]
+    assert turn.usage.model == "backup-a"
