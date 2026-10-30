@@ -89,6 +89,10 @@ def make_llm(settings: Settings, recorder: Any) -> LLMClient:
         from opsloop.core.llm_groq import GroqLLM
 
         return GroqLLM(settings, recorder=recorder)
+    if settings.llm_provider == "gemini":
+        from opsloop.core.llm_gemini import GeminiLLM
+
+        return GeminiLLM(settings, recorder=recorder)
     if settings.llm_provider == "anthropic":
         return AnthropicLLM(settings, recorder=recorder)
     raise ValueError(f"unknown OPSLOOP_LLM_PROVIDER {settings.llm_provider!r}")

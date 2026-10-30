@@ -24,6 +24,8 @@ dependencies = [
     "langgraph>=1.2",
     "langgraph-checkpoint-postgres>=3.2",
     "bandit>=1.9",
+    "groq>=1.7",
+    "google-genai>=2.3",
 ]
 
 [project.optional-dependencies]
