@@ -63,8 +63,21 @@ class Principal(BaseModel):
 
 
 def _record_deploy(engine: Engine, settings: TaskflowSettings) -> None:
+    """Record a deploy only when the running version changed: a plain restart is not a release,
+    and counting restarts as deploys makes every incident look deploy-related."""
     try:
         with engine.begin() as conn:
+            last = conn.execute(
+                text(
+                    "SELECT version, git_sha FROM ops.deploy_events "
+                    "WHERE service = 'taskflow-api' ORDER BY id DESC LIMIT 1"
+                )
+            ).first()
+            if last is not None and (last.version, last.git_sha) == (
+                settings.version,
+                settings.git_sha,
+            ):
+                return
             conn.execute(
                 text(
                     "INSERT INTO ops.deploy_events (service, version, git_sha, stage, actor) "

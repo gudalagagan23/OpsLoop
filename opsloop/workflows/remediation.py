@@ -195,6 +195,17 @@ def build_graph(deps: Deps) -> StateGraph:  # type: ignore[type-arg]
             strategy, why = choose_strategy(
                 body, deps.settings.escalation_confidence, tuple(state.get("exclude", []))
             )
+            if strategy == "rollback":
+                # Automated rollback needs the deployment controller, which this workflow does not
+                # drive yet: take the Investigator's next recommendation instead of giving up.
+                fallback, fb_why = choose_strategy(
+                    body,
+                    deps.settings.escalation_confidence,
+                    (*state.get("exclude", []), "rollback"),
+                )
+                if fallback != "escalate":
+                    why = f"rollback is not automated yet; next recommendation: {fb_why}"
+                    strategy = fallback
             scenario = scenario_for_report(s, body)
             specialist = specialist_for(body["suspected_root_cause"]["category"], deps.profiles)
             ledger.append(

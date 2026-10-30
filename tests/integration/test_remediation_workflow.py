@@ -298,3 +298,35 @@ def test_crashed_run_resumes_from_the_postgres_checkpoint_without_duplicate_atte
             .all()
         )
         assert len(attempts) == 1 and attempts[0].status == "passed"
+
+
+def test_rollback_recommendation_falls_back_to_the_next_strategy(
+    sessions: sessionmaker[Session], kb_fault1: int
+) -> None:
+    inc_id = _incident(sessions, sources=[kb_fault1])
+    with sessions() as s:
+        rep = s.execute(select(Report).where(Report.incident_id == inc_id)).scalar_one()
+        body = dict(rep.body)
+        body["recommended_strategies"] = [
+            {"strategy": "rollback", "rationale": "recent deploy", "risk": "medium"},
+            {"strategy": "code_fix", "rationale": "fix the handler", "risk": "low"},
+        ]
+        body["deployment_correlation"] = {"deploy_event_id": None, "relation": "likely"}
+        rep.body = body
+        s.commit()
+    runner = FakeRunner()
+    out = run_remediation(
+        _deps(sessions, runner, FakeValidator(("passed", 1.0))), inc_id, InMemorySaver()
+    )
+    assert out["outcome"] == "awaiting_approval" and out["strategy"] == "code_fix"
+    assert len(runner.briefs) == 1
+
+
+def test_rollback_only_recommendation_still_escalates(
+    sessions: sessionmaker[Session], kb_fault1: int
+) -> None:
+    inc_id = _incident(sessions, strategy="rollback", sources=[kb_fault1])
+    out = run_remediation(
+        _deps(sessions, FakeRunner(), FakeValidator(("passed", 1.0))), inc_id, InMemorySaver()
+    )
+    assert out["outcome"] == "escalated"
