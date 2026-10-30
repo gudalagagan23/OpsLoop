@@ -1,7 +1,9 @@
+import json
 from functools import lru_cache
+from typing import Annotated, Any
 
-from pydantic import AliasChoices, Field, SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -11,9 +13,32 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://opsloop:opsloop@localhost:55432/opsloop"
     prometheus_url: str = "http://localhost:9090"
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # Dashboard origins allowed to call the API: JSON list or comma-separated
+    # (e.g. "http://localhost:3000,https://opsloop.vercel.app").
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]
     # {"<token>": {"name": "alice", "role": "approver" | "viewer"}}; set in .env only.
-    api_tokens: dict[str, dict[str, str]] = {}
+    api_tokens: Annotated[dict[str, dict[str, str]], NoDecode] = {}
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _origins(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return ["http://localhost:3000"]
+            return (
+                json.loads(v)
+                if v.startswith("[")
+                else [o.strip() for o in v.split(",") if o.strip()]
+            )
+        return v
+
+    @field_validator("api_tokens", mode="before")
+    @classmethod
+    def _tokens(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return json.loads(v) if v.strip() else {}
+        return v
 
     # LLM provider (Claude API). Model names and prices come from the environment only; the
     # API key is read by the SDK from ANTHROPIC_API_KEY and never stored here.

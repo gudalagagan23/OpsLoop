@@ -4,6 +4,7 @@ so planted faults can change in-process behaviour."""
 import asyncio
 import logging
 import os
+import sys
 
 import uvicorn
 
@@ -33,7 +34,13 @@ async def main() -> None:
             access_log=False,
         )
     )
-    await asyncio.gather(api.serve(), ctl.serve())
+    # If either server stops (e.g. the API failed to start because the database was not
+    # reachable yet), stop both and exit non-zero so Docker restarts the container.
+    tasks = {asyncio.create_task(api.serve()), asyncio.create_task(ctl.serve())}
+    await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    api.should_exit = ctl.should_exit = True
+    await asyncio.gather(*tasks, return_exceptions=True)
+    sys.exit(1)
 
 
 if __name__ == "__main__":

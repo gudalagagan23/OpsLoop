@@ -38,3 +38,6 @@ web/tsconfig.tsbuildinfo
 
 # Candidate deployments built for staged rollout
 .candidates/
+
+# Local process logs
+logs/

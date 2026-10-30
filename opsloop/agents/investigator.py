@@ -235,9 +235,12 @@ def investigate(
     ).all()
     valid_ids = {e.id for e in evidence}
     edges = session.execute(select(ServiceDependency.service, ServiceDependency.depends_on)).all()
+    prompt = _build_prompt(incident, evidence, hits, edges, log_ev.id)
+    # Commit before the model call (which can take minutes): this releases the ledger lock so
+    # the engine keeps recording signals, and the board shows the incident as INVESTIGATING.
+    session.commit()
 
     # 2. Ask the model, then verify. One corrective retry if the citations are bad.
-    prompt = _build_prompt(incident, evidence, hits, edges, log_ev.id)
     body, problems = _ask(llm, prompt, incident, valid_ids, {h.id for h in hits})
     if problems:
         log.warning("report for incident %s had problems: %s", incident.id, problems)
