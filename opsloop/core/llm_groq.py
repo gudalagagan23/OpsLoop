@@ -127,7 +127,8 @@ class GroqLLM:
         self.settings = settings or get_settings()
         if not self.settings.llm_model:
             raise LLMNotConfigured("set OPSLOOP_LLM_MODEL in .env (see .env.example)")
-        self.client = client or Groq(max_retries=4, timeout=120.0)
+        key = self.settings.groq_api_key.get_secret_value()
+        self.client = client or Groq(api_key=key or None, max_retries=4, timeout=120.0)
         self.recorder = recorder
 
     def _usage(self, resp: Any, agent: str, started: float, incident_id: int | None) -> LLMUsage:

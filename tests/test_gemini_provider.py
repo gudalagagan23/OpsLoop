@@ -175,3 +175,50 @@ def test_truncated_and_blocked_replies_are_reported() -> None:
         empty.agent_turn(
             agent="a", system="s", messages=[{"role": "user", "content": "go"}], tools=[]
         )
+
+
+class _Flaky:
+    def __init__(self, failures: int, code: int, reply: Any) -> None:
+        self.failures, self.code, self.reply, self.calls = failures, code, reply, 0
+
+    def generate_content(self, **_kw: Any) -> Any:
+        from google.genai import errors
+
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise errors.APIError(
+                self.code, {"error": {"message": "busy", "status": "UNAVAILABLE"}}
+            )
+        return self.reply
+
+
+def test_overload_is_retried_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("opsloop.core.llm_gemini.time.sleep", lambda _s: None)
+    flaky = _Flaky(2, 503, _resp([_part("ok")]))
+    llm = GeminiLLM(Settings(_env_file=None, llm_model="m"), client=SimpleNamespace(models=flaky))
+    turn = llm.agent_turn(
+        agent="a", system="s", messages=[{"role": "user", "content": "go"}], tools=[]
+    )
+    assert turn.text == "ok" and flaky.calls == 3
+
+
+def test_persistent_overload_gives_up_with_a_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("opsloop.core.llm_gemini.time.sleep", lambda _s: None)
+    flaky = _Flaky(99, 503, None)
+    llm = GeminiLLM(Settings(_env_file=None, llm_model="m"), client=SimpleNamespace(models=flaky))
+    with pytest.raises(LLMError, match="503"):
+        llm.agent_turn(
+            agent="a", system="s", messages=[{"role": "user", "content": "go"}], tools=[]
+        )
+    assert flaky.calls == 5
+
+
+def test_client_errors_are_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("opsloop.core.llm_gemini.time.sleep", lambda _s: None)
+    flaky = _Flaky(99, 400, None)
+    llm = GeminiLLM(Settings(_env_file=None, llm_model="m"), client=SimpleNamespace(models=flaky))
+    with pytest.raises(LLMError, match="400"):
+        llm.agent_turn(
+            agent="a", system="s", messages=[{"role": "user", "content": "go"}], tools=[]
+        )
+    assert flaky.calls == 1

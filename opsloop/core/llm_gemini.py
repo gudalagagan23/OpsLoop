@@ -106,7 +106,8 @@ class GeminiLLM:
         self.settings = settings or get_settings()
         if not self.settings.llm_model:
             raise LLMNotConfigured("set OPSLOOP_LLM_MODEL in .env (see .env.example)")
-        self.client = client or genai.Client()
+        key = self.settings.gemini_api_key.get_secret_value()
+        self.client = client or (genai.Client(api_key=key) if key else genai.Client())
         self.recorder = recorder
 
     def _usage(self, resp: Any, agent: str, started: float, incident_id: int | None) -> LLMUsage:
@@ -132,15 +133,26 @@ class GeminiLLM:
             self.recorder(usage)
         return usage
 
+    RETRYABLE = frozenset({429, 500, 502, 503, 504})
+    BACKOFF_S = (2.0, 5.0, 12.0, 25.0)
+
     def _generate(self, contents: Any, config: types.GenerateContentConfig) -> Any:
-        try:
-            return self.client.models.generate_content(
-                model=self.settings.llm_model, contents=contents, config=config
-            )
-        except genai_errors.APIError as exc:
-            raise LLMError(f"Gemini API error {getattr(exc, 'code', '?')}: {exc}") from exc
-        except OSError as exc:
-            raise LLMError(f"cannot reach Gemini: {exc}") from exc
+        """Call the model, retrying overloads and rate limits with backoff (spikes are brief)."""
+        for delay in (*self.BACKOFF_S, None):
+            try:
+                return self.client.models.generate_content(
+                    model=self.settings.llm_model, contents=contents, config=config
+                )
+            except genai_errors.APIError as exc:
+                code = getattr(exc, "code", None)
+                if delay is None or code not in self.RETRYABLE:
+                    raise LLMError(f"Gemini API error {code}: {exc}") from exc
+                time.sleep(delay)
+            except OSError as exc:
+                if delay is None:
+                    raise LLMError(f"cannot reach Gemini: {exc}") from exc
+                time.sleep(delay)
+        raise LLMError("unreachable")  # pragma: no cover
 
     @staticmethod
     def _finish(resp: Any) -> str:

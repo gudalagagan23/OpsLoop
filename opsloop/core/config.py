@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +17,17 @@ class Settings(BaseSettings):
 
     # LLM provider (Claude API). Model names and prices come from the environment only; the
     # API key is read by the SDK from ANTHROPIC_API_KEY and never stored here.
+    # Provider keys: read from .env or the environment, never logged (SecretStr).
+    anthropic_api_key: SecretStr = Field(
+        SecretStr(""),
+        validation_alias=AliasChoices("ANTHROPIC_API_KEY", "OPSLOOP_ANTHROPIC_API_KEY"),
+    )
+    groq_api_key: SecretStr = Field(
+        SecretStr(""), validation_alias=AliasChoices("GROQ_API_KEY", "OPSLOOP_GROQ_API_KEY")
+    )
+    gemini_api_key: SecretStr = Field(
+        SecretStr(""), validation_alias=AliasChoices("GEMINI_API_KEY", "OPSLOOP_GEMINI_API_KEY")
+    )
     llm_provider: str = "anthropic"  # anthropic | groq | gemini
     llm_model: str = ""
     llm_effort: str = "high"
