@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ago, getJson, WING_LABEL, type IncidentDetail } from "@/lib/api";
+import { ApprovalDialog } from "./ApprovalDialog";
 import { useLiveReload } from "./Live";
 
 function fmt(v: number | null): string {
@@ -14,6 +15,11 @@ export function IncidentView({ id }: { id: number }) {
   const [inc, setInc] = useState<IncidentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<number | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("approve") === "1") setReviewing(true);
+  }, []);
 
   const load = useCallback(() => {
     getJson<IncidentDetail>(`/incidents/${id}`)
@@ -90,6 +96,48 @@ export function IncidentView({ id }: { id: number }) {
           </>
         )}
       </section>
+
+      {inc.state === "AWAITING_APPROVAL" && (
+        <section className="panel callout">
+          <h2>A validated fix is waiting for your decision</h2>
+          <button className="btn approve" onClick={() => setReviewing(true)}>
+            Review &amp; decide
+          </button>
+        </section>
+      )}
+
+      {inc.report2 && (
+        <section className="panel">
+          <h2>
+            Report 2 · Validation{" "}
+            <span className={`pill ${inc.report2.body.verdict === "passed" ? "ok" : "bad"}`}>
+              {inc.report2.body.verdict}
+            </span>
+          </h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Attempt</th>
+                <th>Specialist</th>
+                <th>Status</th>
+                <th>Version</th>
+                <th>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inc.attempts.map((a) => (
+                <tr key={a.attempt_no}>
+                  <td>#{a.attempt_no}</td>
+                  <td>{a.specialist}</td>
+                  <td>{a.status}</td>
+                  <td className="mono">{a.version_hash?.slice(0, 12) ?? "–"}</td>
+                  <td>${a.cost_usd.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       <section className="panel">
         <h2>Signals</h2>
@@ -173,6 +221,16 @@ export function IncidentView({ id }: { id: number }) {
           </ul>
         </section>
       </div>
+      {reviewing && (
+        <ApprovalDialog
+          incident={inc}
+          onClose={() => setReviewing(false)}
+          onDone={() => {
+            setReviewing(false);
+            load();
+          }}
+        />
+      )}
     </article>
   );
 }

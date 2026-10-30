@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://opsloop:opsloop@localhost:55432/opsloop"
     prometheus_url: str = "http://localhost:9090"
     cors_origins: list[str] = ["http://localhost:3000"]
+    # {"<token>": {"name": "alice", "role": "approver" | "viewer"}}; set in .env only.
+    api_tokens: dict[str, dict[str, str]] = {}
 
     # LLM provider (Claude API). Model names and prices come from the environment only; the
     # API key is read by the SDK from ANTHROPIC_API_KEY and never stored here.

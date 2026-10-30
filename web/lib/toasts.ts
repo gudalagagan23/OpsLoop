@@ -10,7 +10,6 @@ export type Toast = {
 };
 
 const STATE_TOASTS: Record<string, string> = {
-  AWAITING_APPROVAL: "Approval needed",
   ESCALATED: "Escalated to a human",
   ROLLED_BACK: "Release rolled back",
   RESOLVED: "Verdict: resolved",
@@ -21,7 +20,7 @@ const STATE_TOASTS: Record<string, string> = {
 };
 
 // Needs a person: stays on screen for S1/S2 until dismissed.
-const ACTION_NEEDED = new Set(["opened", "AWAITING_APPROVAL", "ESCALATED", "ROLLED_BACK"]);
+const ACTION_NEEDED = new Set(["opened", "approval_requested", "ESCALATED", "ROLLED_BACK"]);
 
 export function toastFor(e: StreamEvent): Toast | null {
   const inc = e.incident;
@@ -29,6 +28,10 @@ export function toastFor(e: StreamEvent): Toast | null {
   let trigger = e.kind;
   if (e.kind === "opened") title = `New ${inc.severity} incident`;
   else if (e.kind === "report_ready") title = "Report 1 ready";
+  else if (e.kind === "approval_requested") {
+    title = "Approval needed";
+    trigger = "approval_requested";
+  }
   else if (e.kind === "severity_changed") title = `Severity now ${inc.severity}`;
   else if (e.kind === "state_change" && e.to_state && STATE_TOASTS[e.to_state]) {
     title = STATE_TOASTS[e.to_state];
@@ -41,7 +44,7 @@ export function toastFor(e: StreamEvent): Toast | null {
     severity: inc.severity,
     title,
     body: `${inc.key} · ${inc.title}`,
-    href: `/incidents/${inc.id}`,
+    href: e.kind === "approval_requested" ? `/incidents/${inc.id}?approve=1` : `/incidents/${inc.id}`,
     sticky: urgent && ACTION_NEEDED.has(trigger),
   };
 }

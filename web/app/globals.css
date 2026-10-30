@@ -532,3 +532,158 @@ th {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- approval dialog ---- */
+dialog.approval {
+  width: min(960px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 35%);
+}
+
+dialog.approval::backdrop {
+  background: rgb(0 0 0 / 50%);
+}
+
+.approval-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+
+.approval-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.approval-body {
+  padding: 8px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.approval-body h3 {
+  font-size: 13px;
+  margin: 10px 0 4px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+pre.diff,
+textarea.patch-edit {
+  margin: 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre;
+}
+
+textarea.patch-edit {
+  width: 100%;
+  min-height: 220px;
+  color: var(--text);
+  border: 1px solid var(--accent);
+}
+
+pre.diff .add {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  display: inline-block;
+  width: 100%;
+}
+
+pre.diff .del {
+  background: color-mix(in srgb, var(--bad) 18%, transparent);
+  display: inline-block;
+  width: 100%;
+}
+
+pre.diff .hunk {
+  color: var(--accent);
+}
+
+.hash-full {
+  word-break: break-all;
+}
+
+.decide {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.decide input,
+.decide textarea {
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn.approve {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+
+.btn.modify {
+  background: var(--s3);
+  border-color: var(--s3);
+  color: #1a1400;
+}
+
+.btn.reject {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}
+
+.callout {
+  border-left: 4px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}

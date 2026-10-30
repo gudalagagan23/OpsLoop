@@ -6,13 +6,16 @@ from collections.abc import AsyncIterator, Iterator
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from opsloop.approvals import service as approvals
+from opsloop.approvals.service import approval_summary
 from opsloop.core import ledger
 from opsloop.core.config import get_settings
 from opsloop.core.db import DatabaseStatus, check_database, get_engine
@@ -20,6 +23,7 @@ from opsloop.core.models import (
     Evidence,
     Incident,
     IncidentEvent,
+    RemediationAttempt,
     Report,
     Signal,
     WatcherConfig,
@@ -154,8 +158,39 @@ def incident_detail(incident_id: int, db: Db) -> dict[str, Any]:
         .order_by(Report.version.desc())
         .limit(1)
     ).scalar_one_or_none()
+    report2 = db.execute(
+        select(Report)
+        .where(Report.incident_id == incident_id, Report.kind == "report2")
+        .order_by(Report.version.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    attempts = db.execute(
+        select(RemediationAttempt)
+        .where(RemediationAttempt.incident_id == incident_id)
+        .order_by(RemediationAttempt.attempt_no)
+    ).scalars()
     return {
         **incident_summary(inc),
+        "report2": None
+        if report2 is None
+        else {
+            "body": report2.body,
+            "version": report2.version,
+            "created_at": _iso(report2.created_at),
+        },
+        "attempts": [
+            {
+                "attempt_no": a.attempt_no,
+                "strategy": a.strategy,
+                "specialist": a.specialist,
+                "status": a.status,
+                "version_hash": a.version_hash,
+                "cost_usd": a.cost_usd,
+                "notes": a.notes,
+            }
+            for a in attempts
+        ],
+        "approval": approval_summary(db, incident_id),
         "signals": [
             {
                 "id": s.id,
@@ -283,3 +318,132 @@ async def event_stream(request: Request) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ---- approval API (role-checked) ----------------------------------------------------------------
+
+
+class User(BaseModel):
+    name: str
+    role: str  # viewer | approver
+
+
+def current_user(authorization: Annotated[str | None, Header()] = None) -> User:
+    tokens = get_settings().api_tokens
+    token = (
+        authorization[7:] if authorization and authorization.lower().startswith("bearer ") else ""
+    )
+    entry = tokens.get(token)
+    if not entry:
+        raise HTTPException(401, "missing or invalid API token")
+    return User(name=entry["name"], role=entry.get("role", "viewer"))
+
+
+def require_approver(user: Annotated[User, Depends(current_user)]) -> User:
+    if user.role != "approver":
+        raise HTTPException(403, "this action needs the approver role")
+    return user
+
+
+@app.get("/me")
+def me(user: Annotated[User, Depends(current_user)]) -> dict[str, str]:
+    return {"name": user.name, "role": user.role}
+
+
+class DecisionBody(BaseModel):
+    decision: str  # approve | modify | reject
+    version_hash: str
+    reason: str | None = None
+    follow_up: str | None = None  # reject: retry | change_strategy | take_over
+    patch: str | None = None  # modify: the edited diff
+
+
+class PatchBody(BaseModel):
+    patch: str
+
+
+def _conflict(exc: Exception) -> HTTPException:
+    code = 422 if isinstance(exc, approvals.PatchRejected) else 409
+    return HTTPException(code, str(exc))
+
+
+@app.post("/incidents/{incident_id}/approval")
+def decide(
+    incident_id: int,
+    body: DecisionBody,
+    db: Db,
+    user: Annotated[User, Depends(require_approver)],
+) -> dict[str, Any]:
+    if db.get(Incident, incident_id) is None:
+        raise HTTPException(404, "incident not found")
+    try:
+        if body.decision == "approve":
+            row = approvals.approve(
+                db, incident_id, body.version_hash, user.name, ttl_s=get_settings().approval_ttl_s
+            )
+        elif body.decision == "reject":
+            row = approvals.reject(
+                db,
+                incident_id,
+                body.version_hash,
+                user.name,
+                body.reason or "",
+                body.follow_up or "",
+            )
+        elif body.decision == "modify":
+            if not body.patch:
+                raise HTTPException(422, "modify needs the edited patch")
+            approvals.expect_pending(db, incident_id, body.version_hash)
+            att = approvals.submit_patch(
+                db,
+                incident_id,
+                body.patch,
+                user.name,
+                approvals.profile_for_incident(db, incident_id),
+                kind="modify",
+            )
+            db.commit()
+            return {"decision": "modify", "attempt_id": att.id, "state": "VALIDATING"}
+        else:
+            raise HTTPException(422, "decision must be approve, modify or reject")
+    except approvals.ApprovalError as exc:
+        db.rollback()
+        raise _conflict(exc) from exc
+    db.commit()
+    return {
+        "decision": row.decision,
+        "version_hash": row.version_hash,
+        "expires_at": _iso(row.expires_at),
+        "state": db.get_one(Incident, incident_id).state,
+    }
+
+
+@app.post("/incidents/{incident_id}/patch")
+def submit_human_patch(
+    incident_id: int,
+    body: PatchBody,
+    db: Db,
+    user: Annotated[User, Depends(require_approver)],
+) -> dict[str, Any]:
+    """Take-over: a human fix for an escalated incident, validated like any other patch."""
+    if db.get(Incident, incident_id) is None:
+        raise HTTPException(404, "incident not found")
+    try:
+        att = approvals.submit_patch(
+            db,
+            incident_id,
+            body.patch,
+            user.name,
+            approvals.profile_for_incident(db, incident_id),
+            kind="take_over",
+        )
+    except approvals.ApprovalError as exc:
+        db.rollback()
+        raise _conflict(exc) from exc
+    db.commit()
+    return {"attempt_id": att.id, "state": "VALIDATING"}
+
+
+@app.get("/approvals/rates")
+def approval_rates(db: Db) -> dict[str, Any]:
+    return approvals.decision_rates(db)

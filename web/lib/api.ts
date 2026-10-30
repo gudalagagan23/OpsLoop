@@ -84,6 +84,9 @@ export type IncidentDetail = IncidentSummary & {
   events: EventRow[];
   evidence: EvidenceRow[];
   report1: { body: Report1; is_stub: boolean; created_at: string } | null;
+  report2: { body: Report2; version: number; created_at: string } | null;
+  attempts: Attempt[];
+  approval: ApprovalInfo;
 };
 
 export type WatcherStatus = {
@@ -117,3 +120,85 @@ export const WING_LABEL: Record<string, string> = {
   ux: "User Exp.",
   meta: "OpsLoop",
 };
+
+// ---- Stage 2: Report 2, attempts, approval ---------------------------------------------------
+
+export type Criterion = {
+  metric: string;
+  op: string;
+  threshold: number;
+  actual: number;
+  passed: boolean;
+  label: string;
+};
+
+export type Report2 = {
+  verdict: string;
+  strategy: string;
+  scenario: string;
+  diff: string;
+  tests: { step: string; status: string; seconds: number; summary: string }[];
+  performance: {
+    before: Record<string, number>;
+    after: Record<string, number>;
+    criteria: Criterion[];
+    gap_closed: number | null;
+  } | null;
+  security_findings: { rule: string; file?: string; detail: string }[];
+  remaining_risks: string[];
+  rollback_plan: string;
+  version_hash: string;
+  base_commit: string;
+};
+
+export type Attempt = {
+  attempt_no: number;
+  strategy: string;
+  specialist: string;
+  status: string;
+  version_hash: string | null;
+  cost_usd: number;
+  notes: string | null;
+};
+
+export type Decision = {
+  id: number;
+  decision: string;
+  approver: string;
+  version_hash: string;
+  reason: string | null;
+  follow_up: string | null;
+  created_at: string;
+  expires_at: string | null;
+};
+
+export type ApprovalInfo = { pending_version_hash: string | null; decisions: Decision[] };
+
+const TOKEN_KEY = "opsloop.token";
+
+export function getToken(): string {
+  try {
+    return window.localStorage.getItem(TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setToken(token: string): void {
+  try {
+    window.localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    /* storage unavailable (private window): the token just won't persist */
+  }
+}
+
+export async function postJson<T>(path: string, body: unknown, token: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as { detail?: string } & T;
+  if (!res.ok) throw new Error(data.detail ?? `HTTP ${res.status}`);
+  return data;
+}

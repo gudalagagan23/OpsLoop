@@ -3,13 +3,13 @@ incidents to the Investigator. Detection is plain code; no LLM calls in Stage 1.
 
 import logging
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
-from opsloop.agents.investigator import generate_report1_stub
+from opsloop.core import jobs
 from opsloop.core.config import get_settings
 from opsloop.core.db import get_engine
 from opsloop.core.models import Incident, WatcherHeartbeat
@@ -18,6 +18,8 @@ from opsloop.watchers.base import Clear, PromClient, Watcher
 from opsloop.watchers.config import load_configs, register
 
 log = logging.getLogger("opsloop.engine")
+
+INVESTIGATE_SETTLE_S = 25.0
 
 
 def _heartbeat(session: Session, watcher: Watcher) -> None:
@@ -54,12 +56,16 @@ def run_once(watchers: list[Watcher], sessions: sessionmaker[Session]) -> None:
             _heartbeat(s, w)
             s.commit()
     with sessions() as s:
-        mgr = IncidentManager(s)
-        triaged = (
-            select(Incident).where(Incident.state == "TRIAGED").with_for_update(skip_locked=True)
-        )
+        triaged = select(Incident).where(Incident.state == "TRIAGED")
         for inc in s.execute(triaged).scalars():
-            generate_report1_stub(s, mgr, inc)
+            # The worker investigates once correlated signals have settled. Idempotent.
+            jobs.enqueue(
+                s,
+                "investigate",
+                {"incident_id": inc.id},
+                idempotency_key=f"investigate:{inc.id}",
+                run_after=datetime.now(UTC) + timedelta(seconds=INVESTIGATE_SETTLE_S),
+            )
         s.commit()
 
 
