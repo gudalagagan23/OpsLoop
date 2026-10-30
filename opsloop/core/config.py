@@ -13,6 +13,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://opsloop:opsloop@localhost:55432/opsloop"
     prometheus_url: str = "http://localhost:9090"
+    taskflow_url: str = "http://localhost:8080"
+    taskflow_control_url: str = "http://localhost:9100"  # simulation only; never exposed
     # Dashboard origins allowed to call the API: JSON list or comma-separated
     # (e.g. "http://localhost:3000,https://opsloop.vercel.app").
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:3000"]

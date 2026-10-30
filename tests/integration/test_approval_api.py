@@ -7,7 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from opsloop.api.main import app, get_session
+from opsloop.api.deps import get_session
+from opsloop.api.main import app
 from opsloop.core.config import Settings
 from opsloop.core.models import Incident, RemediationAttempt, Report
 from opsloop.incidents.manager import FiredSignal, IncidentManager

@@ -2,23 +2,27 @@
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Iterator
-from datetime import datetime
+from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
+import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, sessionmaker
 
+from opsloop.api.dashboard import router as dashboard_router
+from opsloop.api.deps import COLUMN_OF as _COLUMN_OF
+from opsloop.api.deps import Db, incident_summary
+from opsloop.api.deps import iso as _iso
+from opsloop.api.deps import new_session as _new_session
 from opsloop.approvals import service as approvals
 from opsloop.approvals.service import approval_summary
 from opsloop.core import ledger
 from opsloop.core.config import get_settings
-from opsloop.core.db import DatabaseStatus, check_database, get_engine
+from opsloop.core.db import DatabaseStatus, check_database
 from opsloop.core.models import (
     Evidence,
     Incident,
@@ -38,67 +42,11 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
-
-_COLUMN_OF = {state: col for col, states in BOARD_COLUMNS.items() for state in states}
-_sessions: sessionmaker[Session] | None = None
+app.include_router(dashboard_router)
 
 
 def get_db_status() -> DatabaseStatus:
     return check_database()
-
-
-def _new_session() -> Session:
-    global _sessions
-    if _sessions is None:
-        _sessions = sessionmaker(bind=get_engine(), expire_on_commit=False)
-    return _sessions()
-
-
-def get_session() -> Iterator[Session]:
-    with _new_session() as s:
-        yield s
-
-
-Db = Annotated[Session, Depends(get_session)]
-
-
-def _iso(dt: datetime | None) -> str | None:
-    return dt.isoformat() if dt else None
-
-
-def incident_summary(i: Incident) -> dict[str, Any]:
-    return {
-        "id": i.id,
-        "key": f"INC-{i.id:05d}",
-        "title": i.title,
-        "wing": i.wing,
-        "service": i.service,
-        "severity": i.severity,
-        "state": i.state,
-        "column": _COLUMN_OF.get(i.state, "New"),
-        "assignee": i.assignee or _default_assignee(i.state),
-        "signal_count": i.signal_count,
-        "created_at": _iso(i.created_at),
-        "updated_at": _iso(i.updated_at),
-        "first_signal_at": _iso(i.first_signal_at),
-        "closed_at": _iso(i.closed_at),
-        "closed_reason": i.closed_reason,
-    }
-
-
-def _default_assignee(state: str) -> str | None:
-    return {
-        "OPEN": "incident-manager",
-        "TRIAGED": "incident-manager",
-        "INVESTIGATING": "investigator",
-        "REPORT1_READY": "awaiting coding agent",
-        "FIXING": "coding agent",
-        "VALIDATING": "test loop",
-        "AWAITING_APPROVAL": "human approver",
-        "DEPLOYING": "deployment controller",
-        "VERIFYING": "judge",
-        "ESCALATED": "human",
-    }.get(state)
 
 
 @app.get("/health")
@@ -447,3 +395,34 @@ def submit_human_patch(
 @app.get("/approvals/rates")
 def approval_rates(db: Db) -> dict[str, Any]:
     return approvals.decision_rates(db)
+
+
+# ---- simulation panel ---------------------------------------------------------------------------
+
+
+def _control(method: str, path: str) -> Any:
+    try:
+        r = httpx.request(method, f"{get_settings().taskflow_control_url}{path}", timeout=15)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"fault control unavailable: {exc}") from exc
+
+
+@app.get("/simulation/faults")
+def simulation_faults() -> Any:
+    return _control("GET", "/faults")
+
+
+@app.post("/simulation/faults/{fault_id}/{action}")
+def simulation_toggle(
+    fault_id: str, action: str, _user: Annotated[User, Depends(require_approver)]
+) -> Any:
+    if action not in ("on", "off"):
+        raise HTTPException(422, "action must be on or off")
+    return _control("POST", f"/faults/{fault_id}/{action}")
+
+
+@app.post("/simulation/reset")
+def simulation_reset(_user: Annotated[User, Depends(require_approver)]) -> Any:
+    return _control("POST", "/faults/reset")

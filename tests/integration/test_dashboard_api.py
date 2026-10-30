@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from opsloop.agents.investigator import generate_report1_stub
-from opsloop.api.main import app, get_session
+from opsloop.api.deps import get_session
+from opsloop.api.main import app
 from opsloop.incidents.manager import FiredSignal, IncidentManager
 
 pytestmark = pytest.mark.integration

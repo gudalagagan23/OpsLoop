@@ -123,6 +123,9 @@ services:
       # Set both in .env: allowed dashboard origins, and approver/viewer tokens (JSON).
       OPSLOOP_CORS_ORIGINS: ${OPSLOOP_CORS_ORIGINS:-http://localhost:3000}
       OPSLOOP_API_TOKENS: ${OPSLOOP_API_TOKENS:-}
+      OPSLOOP_PROMETHEUS_URL: http://prometheus:9090
+      OPSLOOP_TASKFLOW_URL: http://taskflow-api:8080
+      OPSLOOP_TASKFLOW_CONTROL_URL: http://taskflow-api:9100
     ports:
       - "8000:8000"
     depends_on:
