@@ -4,3 +4,10 @@ wing: database
 ground_truth: "Missing index on tasks(project_id, status)"
 expected_signals: [db.query_p95]
 detect_timeout_s: 180
+category: database
+flags: [lazy_index_bootstrap]
+acceptable_strategies: [code_fix]
+symptoms: "Queries on the tasks table filtered by project and status got several times slower; query counts per request are normal."
+acceptance:
+  - {metric: tasks_query_p95_ms, op: "<=", value: 15, label: "task list query p95 (ms)"}
+  - {metric: errors, op: "==", value: 0, label: "5xx responses"}

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, MetaData, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, MetaData, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 SCHEMA = "taskflow"
@@ -43,8 +43,8 @@ class Project(Base):
 
 class Task(Base):
     __tablename__ = "tasks"
-    # The (project_id, status) index is the target of planted fault 3 (missing index).
-    __table_args__ = (Index(TASKS_PROJECT_STATUS_INDEX, "project_id", "status"),)
+    # The (project_id, status) index is created by taskflow.api.seed.ensure_task_index during
+    # bootstrap, not here, so the bootstrap step is the only thing that makes it exist.
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))

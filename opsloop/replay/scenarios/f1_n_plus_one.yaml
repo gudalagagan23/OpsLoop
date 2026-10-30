@@ -5,3 +5,10 @@ ground_truth: "N+1 query on GET /projects/{id}/tasks"
 # Any of these firing after the fault starts counts as detection.
 expected_signals: [db.queries_per_request, api.p95_latency, api.p95_latency_shift]
 detect_timeout_s: 180
+category: api
+flags: [legacy_task_loader]
+acceptable_strategies: [code_fix]
+symptoms: "p95 latency of GET /projects/{id}/tasks rose sharply and each request now issues many database queries."
+acceptance:
+  - {metric: queries_per_request_p95, op: "<=", value: 5, label: "queries per list request (p95)"}
+  - {metric: errors, op: "==", value: 0, label: "5xx responses"}

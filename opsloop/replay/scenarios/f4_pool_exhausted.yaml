@@ -4,3 +4,10 @@ wing: database
 ground_truth: "Connection pool exhausted (leaked connections)"
 expected_signals: [db.pool_saturation, db.pool_timeouts, api.error_rate]
 detect_timeout_s: 180
+category: database
+flags: [legacy_conn_helper]
+acceptable_strategies: [code_fix]
+symptoms: "Requests fail with HTTP 503 after a short time; the database connection pool is full and requests time out waiting for a connection."
+acceptance:
+  - {metric: pool_timeouts, op: "==", value: 0, label: "requests that timed out on the pool"}
+  - {metric: errors, op: "==", value: 0, label: "5xx responses"}

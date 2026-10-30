@@ -4,6 +4,7 @@ import hashlib
 
 from sqlalchemy import Engine, text
 
+from taskflow import flags
 from taskflow.api.models import SCHEMA, TASKS_PROJECT_STATUS_INDEX, Base
 from taskflow.config import TaskflowSettings
 
@@ -30,7 +31,8 @@ def init_db(engine: Engine, settings: TaskflowSettings) -> None:
     with engine.begin() as conn:
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
     Base.metadata.create_all(engine)
-    ensure_task_index(engine)  # a restart always clears planted fault 3
+    if not flags.enabled("lazy_index_bootstrap"):
+        ensure_task_index(engine)
     with engine.begin() as conn:
         if conn.execute(text(f"SELECT EXISTS (SELECT 1 FROM {SCHEMA}.tenants)")).scalar_one():
             return

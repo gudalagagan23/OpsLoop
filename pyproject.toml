@@ -42,7 +42,10 @@ include = ["opsloop*", "taskflow*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["integration: needs a running Postgres (docker compose up postgres)"]
+markers = [
+    "integration: needs a running Postgres (docker compose up postgres)",
+    "sandbox: needs Docker and the opsloop-sandbox image; slow",
+]
 
 [tool.ruff]
 line-length = 100
@@ -50,9 +53,14 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S"]
+# Line width is the formatter's job; long regexes and test data cannot be wrapped.
+ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105"]
+"sandbox_tests/**" = ["S101", "S105", "S608"]
+"opsloop/testloop/reference_fixes.py" = ["S101"]
+"opsloop/sandbox/runner.py" = ["S105", "S607"]  # fixed docker/git CLI; throwaway sandbox DB password
 # f-strings there only interpolate the constant schema name; all values are bound parameters.
 "taskflow/api/main.py" = ["S608"]
 "taskflow/api/seed.py" = ["S608"]

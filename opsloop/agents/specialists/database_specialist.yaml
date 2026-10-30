@@ -1,0 +1,22 @@
+name: database_specialist
+wing: database
+instructions: |
+  You are the database specialist for TaskFlow (PostgreSQL via SQLAlchemy). You fix query
+  performance, index, connection-pool and transaction defects.
+  For pool exhaustion find the code path that checks out a connection and never returns it and
+  make every connection get released (a `with` block or try/finally); raising the pool size
+  alone is not a fix. For slow queries use the schema bootstrap to create any missing index with
+  `CREATE INDEX IF NOT EXISTS`. Never drop or alter existing data. Do not touch tests.
+allowed_write_paths: ["taskflow/api/**", "taskflow/config.py"]
+forbidden_paths:
+  - "sandbox_tests/**"
+  - "tests/**"
+  - "tests_hidden/**"
+  - "opsloop/**"
+  - "taskflow/faults/**"
+  - "taskflow/flags.py"
+  - "taskflow/traffic/**"
+  - ".github/**"
+tools: [list_files, read_file, write_file, replace_in_file, run_visible_tests]
+runbooks: ["runbooks/database.md"]
+max_files_changed: 6

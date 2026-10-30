@@ -1,5 +1,6 @@
 """TaskFlow API: a small multi-tenant project tracker (simulated SaaS monitored by OpsLoop)."""
 
+import itertools
 import random
 import time
 import uuid
@@ -15,9 +16,11 @@ from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 from sqlalchemy import Connection, Engine, create_engine, text
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from sqlalchemy.pool import NullPool
 
+from taskflow import flags
 from taskflow.api.models import SCHEMA
 from taskflow.api.seed import hash_password, init_db
 from taskflow.api.telemetry import (
@@ -60,14 +63,17 @@ class Principal(BaseModel):
 
 
 def _record_deploy(engine: Engine, settings: TaskflowSettings) -> None:
-    with engine.begin() as conn:
-        conn.execute(
-            text(
-                "INSERT INTO ops.deploy_events (service, version, git_sha, stage, actor) "
-                "VALUES ('taskflow-api', :v, :sha, '100%', 'startup')"
-            ),
-            {"v": settings.version, "sha": settings.git_sha},
-        )
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO ops.deploy_events (service, version, git_sha, stage, actor) "
+                    "VALUES ('taskflow-api', :v, :sha, '100%', 'startup')"
+                ),
+                {"v": settings.version, "sha": settings.git_sha},
+            )
+    except ProgrammingError:
+        pass  # no ops schema (e.g. an isolated sandbox database): nothing to record
 
 
 def create_app(settings: TaskflowSettings | None = None) -> FastAPI:
@@ -85,7 +91,8 @@ def create_app(settings: TaskflowSettings | None = None) -> FastAPI:
         service="taskflow-api",
         version=settings.version,
     )
-    registry = FaultRegistry(engine, admin_engine, settings.pool_leak_interval_s)
+    registry = FaultRegistry(engine, admin_engine)
+    request_counter = itertools.count(1)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -107,6 +114,18 @@ def create_app(settings: TaskflowSettings | None = None) -> FastAPI:
     # ---- dependencies ---------------------------------------------------------------------
 
     def get_conn() -> Iterator[Connection]:
+        if flags.enabled("legacy_conn_helper"):
+            # Legacy helper: every 4th request keeps its connection and never returns it.
+            conn = engine.connect()
+            if next(request_counter) % 4 == 0:
+                registry.leaked.append(conn)
+                yield conn
+                return
+            try:
+                yield conn
+            finally:
+                conn.close()
+            return
         with engine.connect() as conn:
             yield conn
 
@@ -258,8 +277,8 @@ def create_app(settings: TaskflowSettings | None = None) -> FastAPI:
         where = "t.project_id = :p" + (" AND t.status = :s" if status else "")
         params: dict[str, Any] = {"p": project_id, "s": status, "n": limit}
         name = "tasks_by_project_status" if status else "tasks_by_project"
-        if registry.is_on("1"):
-            # Planted fault 1 (simulated): N+1 queries for assignee and comment count.
+        if flags.enabled("legacy_task_loader"):
+            # Legacy loader: one query for the tasks, then extra queries per row.
             with query_name(name):
                 tasks = [
                     dict(r)

@@ -23,7 +23,6 @@ def app(db_engine: Engine) -> FastAPI:
         log_to_db=False,
         pool_size=3,
         pool_timeout_s=0.5,
-        pool_leak_interval_s=0.05,
     )
     return create_app(settings)
 
@@ -104,18 +103,47 @@ def test_fault_3_drops_and_restores_index(app: FastAPI, db_engine: Engine) -> No
     assert has_index()
 
 
-def test_fault_4_exhausts_pool(app: FastAPI, client: TestClient, auth: dict[str, str]) -> None:
-    import time
-
-    app.state.registry.set("4", True)
+def test_fault_4_leaks_connections_until_the_pool_is_exhausted(
+    app: FastAPI, client: TestClient, auth: dict[str, str]
+) -> None:
+    registry = app.state.registry
+    registry.set("4", True)
     try:
-        time.sleep(0.5)  # leak all 3 connections
-        r = client.get("/projects", headers=auth)
-        assert r.status_code == 503
+        statuses = [client.get("/projects", headers=auth).status_code for _ in range(40)]
+        assert 503 in statuses, "pool of 3 should be exhausted by the leaking helper"
+        assert statuses[0] == 200
         assert client.get("/health").status_code == 503
+        assert len(registry.leaked) == 3
     finally:
-        app.state.registry.set("4", False)
+        registry.set("4", False)
+    assert registry.leaked == []
     assert client.get("/projects", headers=auth).status_code == 200
+
+
+def test_fault_3_flag_skips_index_bootstrap(db_engine: Engine) -> None:
+    from taskflow import flags
+    from taskflow.api.seed import init_db
+
+    with db_engine.connect() as c:
+        c.execute(text(f"DROP INDEX IF EXISTS taskflow.{TASKS_PROJECT_STATUS_INDEX}"))
+        c.commit()
+    flags.set_flag("lazy_index_bootstrap", True)
+    try:
+        init_db(db_engine, TaskflowSettings(database_url="x"))
+        with db_engine.connect() as c:
+            missing = c.execute(
+                text("SELECT 1 FROM pg_indexes WHERE schemaname='taskflow' AND indexname=:i"),
+                {"i": TASKS_PROJECT_STATUS_INDEX},
+            ).first()
+        assert missing is None
+    finally:
+        flags.set_flag("lazy_index_bootstrap", False)
+    init_db(db_engine, TaskflowSettings(database_url="x"))
+    with db_engine.connect() as c:
+        assert c.execute(
+            text("SELECT 1 FROM pg_indexes WHERE schemaname='taskflow' AND indexname=:i"),
+            {"i": TASKS_PROJECT_STATUS_INDEX},
+        ).first()
 
 
 def test_metrics_exposed(client: TestClient) -> None:

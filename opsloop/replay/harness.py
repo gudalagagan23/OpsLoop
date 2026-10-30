@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-import yaml
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -26,26 +25,12 @@ from opsloop.core import ledger
 from opsloop.core.db import get_engine
 from opsloop.core.models import Incident, Report, Signal
 from opsloop.incidents.manager import dismiss_active
+from opsloop.replay.scenario import Scenario
 
 log = logging.getLogger("replay")
-SCENARIO_DIR = Path(__file__).parent / "scenarios"
 ACTOR = "replay-harness"
 SUSPEND_GAP_S = 15.0  # a 1 s sleep that takes this long means the host was suspended
 MAX_ATTEMPTS = 3
-
-
-@dataclass(frozen=True)
-class Scenario:
-    id: str
-    fault: str
-    wing: str
-    ground_truth: str
-    expected_signals: list[str]
-    detect_timeout_s: float = 180
-
-    @classmethod
-    def load_all(cls, directory: Path = SCENARIO_DIR) -> list["Scenario"]:
-        return [cls(**yaml.safe_load(p.read_text())) for p in sorted(directory.glob("*.yaml"))]
 
 
 @dataclass

@@ -22,7 +22,6 @@ class TaskflowSettings(BaseSettings):
     slow_request_ms: float = 500.0
     info_log_sample: float = 0.02
     log_to_db: bool = True
-    pool_leak_interval_s: float = 1.5
 
 
 @lru_cache
