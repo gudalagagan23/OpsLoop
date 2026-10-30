@@ -84,10 +84,20 @@ class Context:
         return self._embedder
 
 
+def make_llm(settings: Settings, recorder: Any) -> LLMClient:
+    if settings.llm_provider == "groq":
+        from opsloop.core.llm_groq import GroqLLM
+
+        return GroqLLM(settings, recorder=recorder)
+    if settings.llm_provider == "anthropic":
+        return AnthropicLLM(settings, recorder=recorder)
+    raise ValueError(f"unknown OPSLOOP_LLM_PROVIDER {settings.llm_provider!r}")
+
+
 def build_context() -> Context:
     settings = get_settings()
     sessions = sessionmaker(bind=get_engine(), expire_on_commit=False)
-    llm = AnthropicLLM(settings, recorder=make_recorder(sessions)) if settings.llm_model else None
+    llm = make_llm(settings, make_recorder(sessions)) if settings.llm_model else None
     if llm is None:
         log.warning("OPSLOOP_LLM_MODEL is not set: running in Stage 1 mode (stub Report 1 only)")
     return Context(sessions, settings, llm)

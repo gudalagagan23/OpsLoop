@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     # LLM provider (Claude API). Model names and prices come from the environment only; the
     # API key is read by the SDK from ANTHROPIC_API_KEY and never stored here.
+    llm_provider: str = "anthropic"  # anthropic | groq
     llm_model: str = ""
     llm_effort: str = "high"
     llm_input_usd_per_mtok: float = 0.0

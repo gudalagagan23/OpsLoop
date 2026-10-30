@@ -96,6 +96,10 @@ class TrafficRunner:
                         headers=s.headers,
                         json={"status": STATUSES[int(ev.choice * 991) % 4]},
                     )
+            if r.status_code == 401:
+                # Tokens expire (default one hour). Log in again so traffic never silently stops.
+                self.sessions[ev.tenant_id] = await self._login(client, ev.tenant_id)
+                self.stats["token_renewed"] += 1
             self.stats[f"{r.status_code // 100}xx"] += 1
         except httpx.HTTPError:
             self.stats["transport_error"] += 1
