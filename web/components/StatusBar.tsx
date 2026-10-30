@@ -1,44 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ago, getJson, type WatcherStatus } from "@/lib/api";
+import { ago, type WatcherStatus } from "@/lib/api";
 import { useLive } from "./Live";
+import { useApi, useNow } from "./useApi";
 
 type Verify = { ok: boolean; checked: number; first_bad_id: number | null };
 
 export function StatusBar() {
   const { connected } = useLive();
-  const [watchers, setWatchers] = useState<WatcherStatus[]>([]);
-  const [ledger, setLedger] = useState<Verify | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const load = () => {
-      getJson<WatcherStatus[]>("/watchers").then(setWatchers).catch(() => setWatchers([]));
-      getJson<Verify>("/ledger/verify").then(setLedger).catch(() => setLedger(null));
-      setNow(Date.now());
-    };
-    load();
-    const id = setInterval(load, 15000);
-    return () => clearInterval(id);
-  }, []);
+  const watchers = useApi<WatcherStatus[]>("/watchers", 10000);
+  const ledger = useApi<Verify>("/ledger/verify", 30000);
+  const now = useNow(5000);
+  const stale = (watchers.data ?? []).filter((w) => now - new Date(w.last_seen).getTime() > 30000);
 
   return (
     <div className="status">
-      <span className={`pill ${connected ? "ok" : "bad"}`}>{connected ? "Live" : "Reconnecting"}</span>
-      {watchers.map((w) => {
-        const stale = now - new Date(w.last_seen).getTime() > 30000;
-        return (
-          <span key={w.watcher} className={`pill ${stale ? "bad" : "ok"}`} title={`last seen ${ago(w.last_seen, now)} ago`}>
-            {w.watcher} v{w.config_version}
-          </span>
-        );
-      })}
-      {ledger && (
-        <span className={`pill ${ledger.ok ? "ok" : "bad"}`} title={`${ledger.checked} entries checked`}>
-          Ledger {ledger.ok ? "verified" : `broken at #${ledger.first_bad_id}`}
+      <span className={`pill ${connected ? "ok live" : "bad"}`} title="Server-sent event stream">
+        {connected ? "Live" : "Reconnecting"}
+      </span>
+      {watchers.data && (
+        <span
+          className={`pill ${stale.length ? "bad" : "ok"}`}
+          title={watchers.data
+            .map((w) => `${w.watcher} watcher v${w.config_version}, last seen ${ago(w.last_seen, now)} ago`)
+            .join("\n")}
+        >
+          Watcher health check: {watchers.data.length - stale.length}/{watchers.data.length} reporting
         </span>
       )}
+      {ledger.data && (
+        <span className={`pill ${ledger.data.ok ? "ok" : "bad"} hide-sm`} title={`${ledger.data.checked} entries checked`}>
+          Ledger {ledger.data.ok ? "verified" : `broken at #${ledger.data.first_bad_id}`}
+        </span>
+      )}
+      {(watchers.error || ledger.error) && <span className="pill bad">API unreachable</span>}
     </div>
   );
 }

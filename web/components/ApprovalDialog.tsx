@@ -11,7 +11,7 @@ import {
 
 type Mode = "review" | "modify" | "reject";
 
-function DiffView({ diff }: { diff: string }) {
+export function DiffView({ diff }: { diff: string }) {
   return (
     <pre className="diff" aria-label="Proposed code change">
       {diff.split("\n").map((line, i) => {
@@ -36,7 +36,7 @@ function fmt(v: number): string {
   return Math.abs(v) >= 100 ? v.toFixed(0) : String(Math.round(v * 100) / 100);
 }
 
-function Tests({ r }: { r: Report2 }) {
+export function Tests({ r }: { r: Report2 }) {
   return (
     <table>
       <thead>
@@ -87,8 +87,9 @@ export function ApprovalDialog({
   useEffect(() => {
     setTok(getToken());
     const d = ref.current;
+    // No close() on cleanup: it fires onClose, and React's effect re-run would then dismiss
+    // the dialog it just opened. Unmounting removes the element anyway.
     if (d && !d.open) d.showModal();
-    return () => d?.close();
   }, []);
 
   const submit = async (body: Record<string, unknown>) => {

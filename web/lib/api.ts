@@ -118,7 +118,7 @@ export const WING_LABEL: Record<string, string> = {
   billing: "Billing",
   infra: "Infra",
   ux: "User Exp.",
-  meta: "OpsLoop",
+  meta: "Watcher health check",
 };
 
 // ---- Stage 2: Report 2, attempts, approval ---------------------------------------------------
@@ -173,6 +173,159 @@ export type Decision = {
 };
 
 export type ApprovalInfo = { pending_version_hash: string | null; decisions: Decision[] };
+
+// ---- dashboard views ---------------------------------------------------------------------------
+
+export type PipelineStage = { key: string; label: string; owner: string; count: number };
+
+export type Overview = {
+  simulated: boolean;
+  now: string;
+  incidents: {
+    active: number;
+    by_severity: Record<Severity, number>;
+    by_stage: Record<string, number>;
+    opened_24h: number;
+    closed_24h: Record<string, number>;
+  };
+  approvals_pending: number;
+  escalated: number;
+  fixes: { attempts: number; validated: number; pass_rate: number | null };
+  timings: { median_signal_to_report1_s: number | null; median_signal_to_approval_s: number | null };
+  llm: { calls_24h: number; tokens_24h: number; cost_usd_24h: number; model: string | null };
+  ledger_entries: number;
+  knowledge_chunks: number;
+  pipeline: PipelineStage[];
+};
+
+export type Department = {
+  wing: string;
+  name: string;
+  services: string[];
+  description: string;
+  status: "incident" | "healthy" | "stale" | "not_monitored";
+  monitored: boolean;
+  watcher: { last_seen: string; seconds_ago: number; config_version: number } | null;
+  signals: { id: string; title: string; method: string; severity: Record<string, string> }[];
+  specialist: string | null;
+  active_incidents: IncidentSummary[];
+  incidents_24h: number;
+  planned_stage: string | null;
+};
+
+export type ComponentStatus = "active" | "working" | "ready" | "waiting" | "down" | "planned";
+
+export type AgentComponent = {
+  key: string;
+  name: string;
+  role: string;
+  status: ComponentStatus;
+  detail: string;
+  last_activity: string | null;
+  working_on?: number | null;
+};
+
+export type AgentsInfo = {
+  components: AgentComponent[];
+  jobs: { queue: string; state: string; count: number }[];
+  llm: { model: string; agent: string; ts: string; latency_s: number } | null;
+};
+
+export type LiveMetrics = {
+  available: boolean;
+  step_s: number;
+  series: Record<string, [number, number][]>;
+};
+
+export type ActivityRow = StreamEvent & { from_state: string | null; actor: string };
+
+export type DecisionRates = {
+  total: number;
+  counts: Record<string, number>;
+  rates: Record<string, number>;
+};
+
+export type PendingApproval = IncidentSummary & {
+  version_hash: string | null;
+  specialist: string | null;
+  waiting_since: string | null;
+};
+
+export type ApprovalsQueue = {
+  pending: PendingApproval[];
+  history: (Omit<Decision, "id"> & { id: number; incident: IncidentSummary })[];
+  rates: DecisionRates;
+};
+
+export type LedgerEntry = EvidenceRow & { incident_id: number | null };
+
+export type LlmCallRow = {
+  id: number;
+  ts: string;
+  agent: string;
+  model: string;
+  incident_id: number | null;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  latency_s: number;
+};
+
+export type Releases = {
+  deployments: {
+    id: number;
+    incident_id: number;
+    version_hash: string;
+    kind: string;
+    state: string;
+    stage_pct: number;
+    started_at: string;
+    finished_at: string | null;
+    reasons: unknown;
+  }[];
+  outcomes: {
+    id: number;
+    incident_id: number;
+    verdict: string;
+    mode: string;
+    summary: string | null;
+    explanation: string | null;
+    created_at: string;
+  }[];
+};
+
+export type RecentSignal = {
+  id: number;
+  watcher: string;
+  signal_id: string;
+  labels: Record<string, string>;
+  severity: Severity;
+  value: number;
+  baseline: number | null;
+  fired_at: string;
+  cleared_at: string | null;
+  incident_id: number | null;
+};
+
+export type Fault = { id: string; wing: string; title: string; on: boolean };
+export type Me = { name: string; role: string };
+
+export function duration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return "–";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
+export async function getAuthJson<T>(path: string, token: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await res.json().catch(() => ({}))) as { detail?: string } & T;
+  if (!res.ok) throw new Error(data.detail ?? `HTTP ${res.status}`);
+  return data;
+}
 
 const TOKEN_KEY = "opsloop.token";
 
