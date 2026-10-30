@@ -1,0 +1,6 @@
+id: f3_missing_index
+fault: "3"
+wing: database
+ground_truth: "Missing index on tasks(project_id, status)"
+expected_signals: [db.query_p95]
+detect_timeout_s: 180

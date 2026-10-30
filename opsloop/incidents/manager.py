@@ -374,6 +374,25 @@ class IncidentManager:
         self.s.flush()
 
 
+_DISMISSABLE = ("OPEN", "TRIAGED", "INVESTIGATING", "REPORT1_READY", "ESCALATED")
+
+
+def dismiss_active(session: Session, *, actor: str, reason: str) -> list[int]:
+    """Dismiss every active incident (row-locked, so a concurrent engine pass can't race it)."""
+    mgr = IncidentManager(session)
+    rows = session.execute(
+        select(Incident)
+        .where(Incident.state.in_(_DISMISSABLE))
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalars()
+    ids = []
+    for inc in rows:
+        mgr.transition(inc, "DISMISSED", actor=actor, reason=reason)
+        ids.append(inc.id)
+    return ids
+
+
 def active_incident_count(session: Session) -> int:
     return session.execute(
         select(func.count()).select_from(Incident).where(Incident.state.in_(ACTIVE_STATES))

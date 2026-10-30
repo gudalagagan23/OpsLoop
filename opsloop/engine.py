@@ -55,7 +55,10 @@ def run_once(watchers: list[Watcher], sessions: sessionmaker[Session]) -> None:
             s.commit()
     with sessions() as s:
         mgr = IncidentManager(s)
-        for inc in s.execute(select(Incident).where(Incident.state == "TRIAGED")).scalars():
+        triaged = (
+            select(Incident).where(Incident.state == "TRIAGED").with_for_update(skip_locked=True)
+        )
+        for inc in s.execute(triaged).scalars():
             generate_report1_stub(s, mgr, inc)
         s.commit()
 

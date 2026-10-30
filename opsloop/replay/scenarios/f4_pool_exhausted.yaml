@@ -1,0 +1,6 @@
+id: f4_pool_exhausted
+fault: "4"
+wing: database
+ground_truth: "Connection pool exhausted (leaked connections)"
+expected_signals: [db.pool_saturation, db.pool_timeouts, api.error_rate]
+detect_timeout_s: 180

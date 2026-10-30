@@ -1,0 +1,7 @@
+id: f1_n_plus_one
+fault: "1"
+wing: api
+ground_truth: "N+1 query on GET /projects/{id}/tasks"
+# Any of these firing after the fault starts counts as detection.
+expected_signals: [db.queries_per_request, api.p95_latency, api.p95_latency_shift]
+detect_timeout_s: 180
