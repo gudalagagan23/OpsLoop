@@ -320,3 +320,38 @@ class PolicyDecision(Base):
     action: Mapped[str] = mapped_column(String(64))
     allowed: Mapped[bool] = mapped_column(Boolean)
     reason: Mapped[str] = mapped_column(Text)
+
+
+# ---------------------------------------------------------------------------------------
+# Stage 3 tables
+# ---------------------------------------------------------------------------------------
+
+
+class Deployment(Base):
+    __tablename__ = "deployments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    incident_id: Mapped[int] = mapped_column(ForeignKey("incidents.id"), index=True)
+    version_hash: Mapped[str] = mapped_column(String(64), index=True)
+    kind: Mapped[str] = mapped_column(String(16), default="patch")  # patch | rollback
+    state: Mapped[str] = mapped_column(String(16))  # running | completed | rolled_back | failed
+    stage_pct: Mapped[int] = mapped_column(Integer, default=0)
+    candidate_ref: Mapped[str | None] = mapped_column(String(128))
+    started_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    finished_at: Mapped[datetime | None]
+    reasons: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    stage_log: Mapped[dict[str, Any]] = mapped_column(default=dict)
+
+
+class Outcome(Base):
+    __tablename__ = "outcomes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    incident_id: Mapped[int] = mapped_column(ForeignKey("incidents.id"), index=True)
+    deployment_id: Mapped[int | None] = mapped_column(ForeignKey("deployments.id"))
+    verdict: Mapped[str] = mapped_column(String(16))
+    mode: Mapped[str] = mapped_column(String(16))  # concurrent | before_after
+    summary: Mapped[dict[str, Any]]
+    explanation: Mapped[str | None] = mapped_column(Text)
+    evidence_id: Mapped[int | None] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
