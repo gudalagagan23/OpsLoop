@@ -24,6 +24,7 @@ jobs:
           --health-retries 20
     env:
       OPSLOOP_DATABASE_URL: postgresql+psycopg://opsloop:opsloop@localhost:5432/opsloop
+      OPSLOOP_REQUIRE_DB: "1"  # integration tests must run in CI, never silently skip
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -40,14 +41,33 @@ jobs:
       - name: Tests
         run: pytest -v
 
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
   compose:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: docker compose up
-        run: docker compose up -d --build --wait --wait-timeout 180
-      - name: Health check
-        run: curl -fsS http://localhost:8000/health
+        run: docker compose up -d --build --wait --wait-timeout 420
+      - name: Health checks
+        run: |
+          curl -fsS http://localhost:8000/health
+          curl -fsS http://localhost:8080/health
+          curl -fsS http://localhost:3000/ > /dev/null
+          curl -fsS http://localhost:8000/ledger/verify
       - name: Logs on failure
         if: failure()
         run: docker compose logs

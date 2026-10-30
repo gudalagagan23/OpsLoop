@@ -1,3 +1,5 @@
+import pytest
+
 from opsloop.replay.harness import RunResult, Scenario, summarize
 
 
@@ -39,3 +41,18 @@ def test_shipped_scenarios_load_and_hold_out_faults_5_9_11() -> None:
     scenarios = Scenario.load_all()
     assert {s.fault for s in scenarios} == {"1", "3", "4"}
     assert not {"5", "9", "11"} & {s.fault for s in scenarios}
+
+
+def test_sleep_detects_host_suspend(monkeypatch: "pytest.MonkeyPatch") -> None:
+    from opsloop.replay import harness as h
+
+    clock = {"t": 1000.0}
+    naps = iter([1.0, 1.0, 900.0, 1.0, 1.0])  # third 1 s step "takes" 900 s: lid closed
+
+    monkeypatch.setattr(h.time, "time", lambda: clock["t"])
+    monkeypatch.setattr(h.time, "sleep", lambda s: clock.__setitem__("t", clock["t"] + next(naps)))
+    harness = h.Harness.__new__(h.Harness)
+    harness.suspended_for = 0.0
+    harness.sleep(5)
+    assert harness.suspended_for == 899.0
+

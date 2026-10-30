@@ -30,6 +30,8 @@ from opsloop.incidents.manager import dismiss_active
 log = logging.getLogger("replay")
 SCENARIO_DIR = Path(__file__).parent / "scenarios"
 ACTOR = "replay-harness"
+SUSPEND_GAP_S = 15.0  # a 1 s sleep that takes this long means the host was suspended
+MAX_ATTEMPTS = 3
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,8 @@ class RunResult:
     clean_window_s: float
     false_alarms: list[dict[str, Any]] = field(default_factory=list)
     off_target: list[dict[str, Any]] = field(default_factory=list)
+    # Set when the host suspended mid-run (e.g. laptop lid closed): the run is discarded.
+    invalid_reason: str | None = None
 
 
 def _pct(values: list[float], q: float) -> float:
@@ -110,6 +114,19 @@ class Harness:
         self.control = httpx.Client(base_url=control_url, timeout=30)
         self.rng = random.Random(seed)  # noqa: S311 - schedule jitter, not security
         self.seed = seed
+        self.suspended_for = 0.0
+
+    def sleep(self, seconds: float) -> None:
+        """Sleep in 1 s steps, noting any wall-clock gap that means the host was suspended."""
+        end = time.time() + seconds
+        while (left := end - time.time()) > 0:
+            step = min(1.0, left)
+            before = time.time()
+            time.sleep(step)
+            gap = time.time() - before - step
+            if gap > SUSPEND_GAP_S:
+                self.suspended_for += gap
+                log.warning("host appears to have been suspended for %.0f s", gap)
 
     # ---- helpers ------------------------------------------------------------------------
 
@@ -128,13 +145,13 @@ class Harness:
             ).scalar_one()
 
     def wait_quiet(self, timeout_s: float = 420) -> None:
-        deadline = time.monotonic() + timeout_s
+        deadline = time.time() + timeout_s
         quiet_polls = 0
-        while time.monotonic() < deadline:
+        while time.time() < deadline:
             quiet_polls = quiet_polls + 1 if self.open_signal_count() == 0 else 0
             if quiet_polls >= 3:
                 return
-            time.sleep(5)
+            self.sleep(5)
         log.warning("signals still open after %.0fs; continuing", timeout_s)
 
     def dismiss_all(self, reason: str) -> list[int]:
@@ -170,10 +187,11 @@ class Harness:
         self.control.post("/faults/reset").raise_for_status()
         self.wait_quiet()
         self.dismiss_all(f"replay round {rnd}: reset before {sc.id}")
+        self.suspended_for = 0.0
 
         clean_s = self.rng.uniform(60, 90)
         clean_start = self.db_now()
-        time.sleep(clean_s)
+        self.sleep(clean_s)
         fault_on = self.db_now()
         false_alarms = self.incidents_between(clean_start, fault_on)
         if false_alarms:
@@ -185,8 +203,8 @@ class Harness:
         detected_at: datetime | None = None
         first_signal: str | None = None
         incident_id: int | None = None
-        deadline = time.monotonic() + sc.detect_timeout_s
-        while time.monotonic() < deadline:
+        deadline = time.time() + sc.detect_timeout_s
+        while time.time() < deadline:
             with self.sessions() as s:
                 hit = s.execute(
                     select(Signal)
@@ -201,13 +219,13 @@ class Harness:
                     hit.incident_id,
                 )
                 break
-            time.sleep(2)
+            self.sleep(2)
 
         report1 = False
         severity = None
         signals: list[str] = []
         if incident_id is not None:
-            time.sleep(20)  # let correlated signals attach before snapshotting
+            self.sleep(20)  # let correlated signals attach before snapshotting
             with self.sessions() as s:
                 inc = s.get_one(Incident, incident_id)
                 severity = inc.severity
@@ -255,6 +273,9 @@ class Harness:
             clean_window_s=clean_s,
             false_alarms=false_alarms,
             off_target=off_target,
+            invalid_reason=f"host suspended for {self.suspended_for:.0f} s"
+            if self.suspended_for
+            else None,
         )
 
     def run(self, scenarios: list[Scenario], rounds: int, out_dir: Path) -> dict[str, Any]:
@@ -262,16 +283,23 @@ class Harness:
         stamp = started.strftime("%Y%m%dT%H%M%SZ")
         out_dir.mkdir(parents=True, exist_ok=True)
         results: list[RunResult] = []
+        discarded: list[RunResult] = []
         try:
             for rnd in range(1, rounds + 1):
                 for sc in self.rng.sample(scenarios, len(scenarios)):
-                    results.append(self.run_one(sc, rnd))
-                    self._write(out_dir, stamp, started, results, partial=True)
+                    for _attempt in range(MAX_ATTEMPTS):
+                        r = self.run_one(sc, rnd)
+                        if r.invalid_reason is None:
+                            results.append(r)
+                            break
+                        log.warning("discarding round %d %s: %s", rnd, sc.id, r.invalid_reason)
+                        discarded.append(r)
+                    self._write(out_dir, stamp, started, results, discarded, partial=True)
         finally:
             self.control.post("/faults/reset")
             self.wait_quiet()
             self.dismiss_all("replay finished")
-        return self._write(out_dir, stamp, started, results, partial=False)
+        return self._write(out_dir, stamp, started, results, discarded, partial=False)
 
     def _write(
         self,
@@ -279,6 +307,7 @@ class Harness:
         stamp: str,
         started: datetime,
         results: list[RunResult],
+        discarded: list[RunResult],
         partial: bool,
     ) -> dict[str, Any]:
         with self.sessions() as s:
@@ -293,6 +322,7 @@ class Harness:
             "ledger_entries_checked": v.checked,
             "summary": summarize(results) if results else {},
             "runs": [asdict(r) for r in results],
+            "discarded_runs": [asdict(r) for r in discarded],
         }
         (out_dir / f"stage1_detection_{stamp}.json").write_text(json.dumps(doc, indent=2))
         return doc
