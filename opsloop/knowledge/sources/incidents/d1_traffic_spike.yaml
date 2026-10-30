@@ -1,0 +1,8 @@
+fault: D1
+wing: api
+title: "Legitimate traffic spike (not a bug)"
+symptoms: "request rate rises well above normal and latency rises smoothly with it; error rate stays low; no recent deploy."
+signals: [api.p95_latency]
+root_cause: "A real increase in user traffic. No defect exists."
+fix: "DISMISS - no code or configuration change. Watch capacity."
+validation: "no change applied."

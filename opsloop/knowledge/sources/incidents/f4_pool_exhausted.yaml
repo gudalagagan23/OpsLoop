@@ -1,0 +1,8 @@
+fault: "4"
+wing: database
+title: "Connection pool exhausted"
+symptoms: "db_pool_in_use equals db_pool_size, db_pool_timeouts_total rising, HTTP 503, requests stall for the pool timeout."
+signals: [db.pool_saturation, db.pool_timeouts, api.error_rate]
+root_cause: "A request path checks out a database connection and never returns it, so the pool drains."
+fix: "code_fix - release the connection (use a with block or close in finally). Raising pool size alone is not a fix."
+validation: "zero pool timeouts under replay load."

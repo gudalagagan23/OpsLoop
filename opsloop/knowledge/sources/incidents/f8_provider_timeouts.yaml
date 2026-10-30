@@ -1,0 +1,8 @@
+fault: "8"
+wing: billing
+title: "Payment provider timeouts and failing webhooks"
+symptoms: "billing_payment_total timeouts and billing_webhook_total failures rise while the provider is reachable for some requests."
+signals: [billing.payment_failure_rate, billing.webhook_failure_rate]
+root_cause: "No client timeout or retry on provider calls and non-idempotent webhook handlers."
+fix: "code_fix - explicit timeouts, retries with backoff, idempotent webhooks."
+validation: "webhook success above 99 percent."

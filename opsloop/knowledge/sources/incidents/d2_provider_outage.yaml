@@ -1,0 +1,8 @@
+fault: D2
+wing: billing
+title: "Payment provider outage (provider side)"
+symptoms: "every payment call fails for every tenant at the same moment; the application itself is healthy."
+signals: [billing.payment_failure_rate]
+root_cause: "The external payment provider is down. This cannot be fixed in TaskFlow code."
+fix: "ESCALATE to a human with the evidence; do not change code."
+validation: "handed to a human."

@@ -1,0 +1,8 @@
+fault: "6"
+wing: auth
+title: "Misconfigured JWT secret or expiry after a config change"
+symptoms: "401 rate jumps to near 100 percent on authenticated routes right after a config change."
+signals: [auth.token_errors]
+root_cause: "The verifying code uses a different JWT secret or a too-short expiry than the issuing code."
+fix: "config_fix - restore the previous secret and expiry."
+validation: "401 rate back to baseline."

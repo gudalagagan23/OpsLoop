@@ -1,0 +1,8 @@
+fault: "10"
+wing: infra
+title: "Job queue backlog"
+symptoms: "queue_depth grows steadily; job duration is normal."
+signals: [infra.queue_depth_growth]
+root_cause: "Worker concurrency is too low for the job arrival rate."
+fix: "config_fix - raise worker concurrency."
+validation: "queue depth drains."

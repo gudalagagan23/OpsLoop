@@ -55,4 +55,3 @@ def test_sleep_detects_host_suspend(monkeypatch: "pytest.MonkeyPatch") -> None:
     harness.suspended_for = 0.0
     harness.sleep(5)
     assert harness.suspended_for == 899.0
-

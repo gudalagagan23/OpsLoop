@@ -1,0 +1,8 @@
+fault: "2"
+wing: api
+title: "Bad release returns 500 on POST /tasks"
+symptoms: "5xx error rate on POST /projects/{id}/tasks right after a deploy; other routes healthy."
+signals: [api.error_rate]
+root_cause: "The latest release introduced an exception in the task creation path."
+fix: "rollback to the previous version, or code_fix of the failing path."
+validation: "error rate below 0.5%."

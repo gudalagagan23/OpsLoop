@@ -1,0 +1,8 @@
+fault: "12"
+wing: ux
+title: "Frontend error spike after an API contract change"
+symptoms: "frontend_errors_total rises right after an API deploy; API error rate normal."
+signals: [ux.frontend_error_rate]
+root_cause: "An API response field was renamed or removed and the frontend still reads the old one."
+fix: "rollback, or code_fix restoring the old field."
+validation: "frontend error rate at baseline."

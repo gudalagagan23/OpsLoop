@@ -1,0 +1,8 @@
+fault: "7"
+wing: auth
+title: "Login attempt burst (credential stuffing simulation)"
+symptoms: "login failure counts spike across many emails from few sources."
+signals: [auth.login_failure_rate]
+root_cause: "No rate limit on the login endpoint."
+fix: "code_fix or config_fix - add per-source rate limiting. Never weaken authentication."
+validation: "attack throttled while normal logins succeed."

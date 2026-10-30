@@ -1,0 +1,8 @@
+fault: "1"
+wing: api
+title: "N+1 query on GET /projects/{id}/tasks"
+symptoms: "p95 latency of the task list route jumps from tens of ms to seconds; no 5xx errors."
+signals: [api.p95_latency, db.queries_per_request]
+root_cause: "The list handler runs one query for the tasks and then separate queries per row for the assignee and comment count."
+fix: "code_fix - load assignee and comment count in the list query (JOIN or correlated subquery) so one request issues one query."
+validation: "p95 queries per request below 10 and p95 latency below 300 ms under replay."

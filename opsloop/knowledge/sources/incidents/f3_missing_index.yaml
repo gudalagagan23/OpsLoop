@@ -1,0 +1,8 @@
+fault: "3"
+wing: database
+title: "Missing index on tasks(project_id, status)"
+symptoms: "db_query_duration_seconds p95 for tasks_by_project and tasks_by_project_status rises from a few ms to tens of ms; queries per request normal."
+signals: [db.query_p95]
+root_cause: "The composite index ix_tasks_project_status is not created, so the filtered task query scans the whole tasks table."
+fix: "code_fix - create the index in the schema bootstrap (CREATE INDEX IF NOT EXISTS). Schema change: needs human approval."
+validation: "tasks query p95 below 15 ms under replay."
