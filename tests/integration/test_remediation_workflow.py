@@ -322,6 +322,32 @@ def test_rollback_recommendation_falls_back_to_the_next_strategy(
     assert len(runner.briefs) == 1
 
 
+def test_a_second_run_numbers_attempts_after_the_first_and_has_its_own_budget(
+    sessions: sessionmaker[Session], kb_fault1: int
+) -> None:
+    inc_id = _incident(sessions, sources=[kb_fault1])
+    first = run_remediation(
+        _deps(sessions, FakeRunner(), FakeValidator(("failed", 0.5)), max_attempts=2),
+        inc_id,
+        InMemorySaver(),
+    )
+    assert first["outcome"] == "escalated"
+    second = run_remediation(  # a human sends the escalation back for another go
+        _deps(sessions, FakeRunner(), FakeValidator(("passed", 1.0)), max_attempts=2),
+        inc_id,
+        InMemorySaver(),
+        run_id="2",
+    )
+    assert second["outcome"] == "awaiting_approval" and second["attempt_no"] == 3
+    with sessions() as s:
+        rows = s.execute(
+            select(RemediationAttempt.attempt_no, RemediationAttempt.status)
+            .where(RemediationAttempt.incident_id == inc_id)
+            .order_by(RemediationAttempt.attempt_no)
+        ).all()
+    assert [tuple(r) for r in rows] == [(1, "failed"), (2, "failed"), (3, "passed")]
+
+
 def test_rollback_only_recommendation_still_escalates(
     sessions: sessionmaker[Session], kb_fault1: int
 ) -> None:

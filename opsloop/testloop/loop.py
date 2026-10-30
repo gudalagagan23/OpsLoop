@@ -232,8 +232,16 @@ def _report2(
 ) -> dict[str, Any]:
     policy = next((s for s in steps if s.name == "diff_policy"), None)
     perf = next((s for s in steps if s.name == "performance"), None)
+    # Changed lines only (context is not the change), and index helpers as well as raw DDL.
+    changed = "\n".join(
+        ln[1:] for ln in patch.splitlines() if ln[:1] in "+-" and not ln.startswith(("+++", "---"))
+    )
     schema_change = bool(
-        re.search(r"CREATE\s+(UNIQUE\s+)?INDEX|ALTER\s+TABLE|DROP\s+", patch, re.I)
+        re.search(
+            r"CREATE\s+(UNIQUE\s+)?INDEX|ALTER\s+TABLE|DROP\s+|\bensure_\w*index\b|\bIndex\(",
+            changed,
+            re.I,
+        )
     )
     risks: list[str] = []
     if schema_change:

@@ -228,6 +228,8 @@ class ApiToolLoopRunner:
             except LLMError as exc:
                 errors.append(str(exc))
                 stopped = "error"
+                # Becomes the attempt's notes, so an escalation says why the model call failed.
+                final_text = final_text or f"Model call failed: {exc}"[:300]
                 break
             cost += turn.usage.cost_usd
             final_text = turn.text or final_text

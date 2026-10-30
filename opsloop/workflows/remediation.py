@@ -100,6 +100,7 @@ class State(TypedDict, total=False):
     category_specialist: str
     tried: list[str]
     attempt_no: int
+    attempt_base: int  # attempts this incident had before this run started
     switches: int
     notes: list[str]
     cost_usd: float
@@ -208,6 +209,16 @@ def build_graph(deps: Deps) -> StateGraph:  # type: ignore[type-arg]
                     strategy = fallback
             scenario = scenario_for_report(s, body)
             specialist = specialist_for(body["suspected_root_cause"]["category"], deps.profiles)
+            # A later run (after a rejection or a human hand-back) numbers its attempts after the
+            # earlier ones, so it never reuses, and overwrites, an earlier attempt's row.
+            base = (
+                s.execute(
+                    select(func.max(RemediationAttempt.attempt_no)).where(
+                        RemediationAttempt.incident_id == inc.id
+                    )
+                ).scalar()
+                or 0
+            )
             ledger.append(
                 s,
                 type="strategy",
@@ -225,7 +236,8 @@ def build_graph(deps: Deps) -> StateGraph:  # type: ignore[type-arg]
                 "specialist": specialist,
                 "category_specialist": specialist,
                 "tried": [specialist],
-                "attempt_no": 0,
+                "attempt_no": base,
+                "attempt_base": base,
                 "switches": 0,
                 "notes": list(state.get("notes", [])),
                 "cost_usd": 0.0,
@@ -365,7 +377,7 @@ def build_graph(deps: Deps) -> StateGraph:  # type: ignore[type-arg]
         d = decide(
             verdict=state["verdict"],
             gap_closed=state["gap_closed"],
-            attempt_no=state["attempt_no"],
+            attempt_no=state["attempt_no"] - state.get("attempt_base", 0),  # budget is per run
             switches=state["switches"],
             elapsed_s=deps.clock() - state["started_at"],
             cost_usd=cost,
