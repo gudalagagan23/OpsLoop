@@ -63,7 +63,12 @@ class IncidentManager:
             )
         ).scalar_one_or_none()
         if existing is not None and existing.incident_id is not None:
-            return self._update_open_signal(existing, fired)
+            owner = self.s.get_one(Incident, existing.incident_id)
+            if owner.state not in TERMINAL_STATES:
+                return self._update_open_signal(existing, fired)
+            # The incident was closed while this signal still fired: retire the old signal
+            # row and treat this firing as new, so it can't hide inside a closed incident.
+            existing.cleared_at = fired.fired_at
 
         incident = self._correlate(fired.service)
         opened = incident is None

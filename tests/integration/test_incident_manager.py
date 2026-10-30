@@ -112,6 +112,18 @@ def test_cleared_signal_fires_again_as_new_row(db: Session, request: pytest.Fixt
     assert len(rows) == 2
 
 
+def test_signal_still_firing_after_dismissal_opens_new_incident(
+    db: Session, request: pytest.FixtureRequest
+) -> None:
+    mgr = IncidentManager(db, run_tag=_tag(request))
+    first = mgr.ingest(_fired(signal_id="t9.sig", series_key="s", service="ext-t9"))
+    mgr.transition(first, "DISMISSED", actor="test", reason="not a bug")
+    second = mgr.ingest(_fired(signal_id="t9.sig", series_key="s", service="ext-t9"))
+    db.commit()
+    assert second.id != first.id
+    assert second.state == "TRIAGED"
+
+
 def test_illegal_transition_raises(db: Session, request: pytest.FixtureRequest) -> None:
     mgr = IncidentManager(db, run_tag=_tag(request))
     inc = mgr.ingest(_fired(signal_id="t6.sig", series_key="q"))

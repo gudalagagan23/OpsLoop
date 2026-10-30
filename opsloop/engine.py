@@ -62,6 +62,7 @@ def run_once(watchers: list[Watcher], sessions: sessionmaker[Session]) -> None:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     settings = get_settings()
     sessions = sessionmaker(bind=get_engine(), expire_on_commit=False)
     configs = load_configs()

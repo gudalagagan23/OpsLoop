@@ -47,6 +47,7 @@ services:
       TASKFLOW_JWT_SECRET: ${TASKFLOW_JWT_SECRET:-sim-dev-secret-not-for-production}
       TASKFLOW_VERSION: ${TASKFLOW_VERSION:-1.0.0}
     command: ["python", "-m", "taskflow.api"]
+    restart: unless-stopped
     ports:
       - "8080:8080"
       # Fault control port: simulation harness only, bound to localhost, never given to agents.
@@ -68,6 +69,7 @@ services:
       TRAFFIC_PROFILE: /app/taskflow/traffic/profiles/default.yaml
       TRAFFIC_SEED: ${TRAFFIC_SEED:-42}
     command: ["python", "-m", "taskflow.traffic.runner"]
+    restart: unless-stopped
     depends_on:
       taskflow-api:
         condition: service_healthy
@@ -81,9 +83,44 @@ services:
     depends_on:
       - taskflow-api
 
-  opsloop-api:
+  opsloop-engine:
+    <<: *python
+    environment:
+      <<: *db-env
+      OPSLOOP_PROMETHEUS_URL: http://prometheus:9090
+    command: ["python", "-m", "opsloop.engine"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      prometheus:
+        condition: service_started
+
+  opsloop-heartbeat:
     <<: *python
     environment: *db-env
+    command: ["python", "-m", "opsloop.heartbeat"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  opsloop-web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        NEXT_PUBLIC_OPSLOOP_API: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - opsloop-api
+
+  opsloop-api:
+    <<: *python
+    environment:
+      <<: *db-env
+      OPSLOOP_CORS_ORIGINS: '["http://localhost:3000"]'
     ports:
       - "8000:8000"
     depends_on:

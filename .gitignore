@@ -31,3 +31,7 @@ eval/results/*
 # Local assistant pointer (not published)
 CLAUDE.md
 .claude/
+
+# Next.js generated
+web/next-env.d.ts
+web/tsconfig.tsbuildinfo
