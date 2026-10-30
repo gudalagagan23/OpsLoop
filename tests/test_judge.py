@@ -15,7 +15,7 @@ from opsloop.deploy.health import Sample
 def gen(
     target: str, n: int, ms: float, err: float = 0.0, seed: int = 0, jitter: float = 0.15
 ) -> list[Sample]:
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # noqa: S311 - test data, not security
     out = []
     for i in range(n):
         kind = "create" if i % 6 == 0 else "list"
