@@ -84,6 +84,20 @@ def test_investigate_is_idempotent(sessions: sessionmaker[Session]) -> None:
         )
 
 
+def test_a_retried_investigation_resumes_from_investigating(
+    sessions: sessionmaker[Session],
+) -> None:
+    inc_id = _triaged(sessions)
+    with sessions() as s:  # a first attempt got this far, then the model call failed
+        IncidentManager(s).transition(s.get_one(Incident, inc_id), "INVESTIGATING", actor="t")
+        s.commit()
+    with sessions() as s:
+        handle_investigate(_ctx(sessions, None), s, {"incident_id": inc_id})
+        s.commit()
+    with sessions() as s:
+        assert s.get_one(Incident, inc_id).state == "REPORT1_READY"
+
+
 def test_with_a_model_investigation_queues_remediation(sessions: sessionmaker[Session]) -> None:
     with sessions() as s:
         s.execute(delete(KnowledgeChunk))

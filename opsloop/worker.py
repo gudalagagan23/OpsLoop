@@ -112,7 +112,9 @@ def build_context() -> Context:
 
 def handle_investigate(ctx: Context, session: Session, payload: dict[str, Any]) -> None:
     inc = session.get_one(Incident, payload["incident_id"])
-    if inc.state != "TRIAGED":
+    # INVESTIGATING is committed before the model call, so a retried job (say, after a provider
+    # overload) finds it in that state and must resume, not skip.
+    if inc.state not in ("TRIAGED", "INVESTIGATING"):
         return  # already investigated, dismissed or escalated: nothing to do
     mgr = IncidentManager(session)
     if ctx.llm is None:
