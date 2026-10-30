@@ -367,6 +367,20 @@ main {
   gap: 10px;
 }
 
+.api-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.api-setting input {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+}
+
 .field {
   display: flex;
   flex-direction: column;

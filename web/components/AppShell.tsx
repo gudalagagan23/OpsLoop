@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { Overview } from "@/lib/api";
+import { apiBase, DEFAULT_API_BASE, setApiBase, type Overview } from "@/lib/api";
 import { useAuth } from "./Auth";
 import { Icon } from "./Icon";
 import { NotificationList, useLive } from "./Live";
@@ -212,8 +212,62 @@ function Account() {
               <p className="muted small">Approvals are bound to the person and the exact version hash.</p>
             </form>
           )}
+          <ApiSetting />
         </div>
       )}
     </div>
+  );
+}
+
+/** Point this browser at a different OpsLoop API, e.g. after the tunnel restarts with a new URL. */
+function ApiSetting() {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setValue(apiBase()), []);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const url = value.trim().replace(/\/$/, "");
+    if (url && !/^https:\/\/|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(url)) {
+      setError("Use an https:// address (or http://localhost).");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${url || DEFAULT_API_BASE}/health`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`health check returned HTTP ${res.status}`);
+      setApiBase(url);
+      window.location.reload();
+    } catch (err) {
+      setError(`Cannot reach that API: ${(err as Error).message}`);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={save} className="api-setting">
+      <label className="field">
+        OpsLoop API address
+        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder={DEFAULT_API_BASE} spellCheck={false} />
+      </label>
+      {error && <p className="error small">{error}</p>}
+      <div className="buttons">
+        <button className="btn sm" disabled={busy}>
+          Test &amp; connect
+        </button>
+        <button
+          type="button"
+          className="btn sm"
+          onClick={() => {
+            setApiBase("");
+            window.location.reload();
+          }}
+        >
+          Reset to default
+        </button>
+      </div>
+    </form>
   );
 }

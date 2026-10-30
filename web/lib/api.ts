@@ -1,4 +1,29 @@
-export const API_BASE = process.env.NEXT_PUBLIC_OPSLOOP_API ?? "http://localhost:8000";
+export const DEFAULT_API_BASE = (process.env.NEXT_PUBLIC_OPSLOOP_API ?? "http://localhost:8000").replace(/\/$/, "");
+const API_KEY = "opsloop.api";
+
+/**
+ * The API this browser talks to: an address saved in Settings (a quick tunnel gets a new URL each
+ * time it restarts), else the one baked in at build time.
+ */
+export function apiBase(): string {
+  try {
+    return window.localStorage.getItem(API_KEY) || DEFAULT_API_BASE;
+  } catch {
+    return DEFAULT_API_BASE;
+  }
+}
+
+/** Save (or with "" clear) the API override. The saved token is dropped: it belongs to the old API. */
+export function setApiBase(url: string): void {
+  try {
+    const clean = url.trim().replace(/\/$/, "");
+    if (clean && clean !== DEFAULT_API_BASE) window.localStorage.setItem(API_KEY, clean);
+    else window.localStorage.removeItem(API_KEY);
+    window.localStorage.removeItem("opsloop.token");
+  } catch {
+    /* storage unavailable: the override just won't persist */
+  }
+}
 
 export type Severity = "S1" | "S2" | "S3" | "S4";
 
@@ -97,7 +122,7 @@ export type WatcherStatus = {
 };
 
 export async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+  const res = await fetch(`${apiBase()}${path}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
   return (await res.json()) as T;
 }
@@ -318,7 +343,7 @@ export function duration(seconds: number | null | undefined): string {
 }
 
 export async function getAuthJson<T>(path: string, token: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     cache: "no-store",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -346,7 +371,7 @@ export function setToken(token: string): void {
 }
 
 export async function postJson<T>(path: string, body: unknown, token: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { API_BASE, WING_LABEL, type StreamEvent } from "@/lib/api";
+import { apiBase, WING_LABEL, type StreamEvent } from "@/lib/api";
 import { toastFor, type Toast } from "@/lib/toasts";
 import { Icon, TONE_ICON } from "./Icon";
 
@@ -48,7 +48,7 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const es = new EventSource(`${API_BASE}/events/stream`);
+    const es = new EventSource(`${apiBase()}/events/stream`);
     es.onopen = () => setConnected(true);
     es.onerror = () => setConnected(false);
     es.addEventListener("incident", (msg) => {
