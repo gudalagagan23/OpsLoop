@@ -223,6 +223,15 @@ function Publish-Url([string]$url) {
 
 # ---- main ---------------------------------------------------------------------------------
 
+# One copy only: VS Code runs this on folder open, so a second double-click would start a rival
+# watcher that keeps replacing this one's tunnel.
+$others = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -match "-File\s+.*start-opsloop\.ps1" }
+if ($others) {
+    Write-Host "OpsLoop is already running in another window (VS Code or Start OpsLoop). Nothing to do here." -ForegroundColor Yellow
+    exit 0
+}
+
 Write-Host ""
 Write-Host "  OpsLoop  -  autonomous investigation and fix proposal, human-gated release (simulated)" -ForegroundColor Cyan
 Write-Host ""
