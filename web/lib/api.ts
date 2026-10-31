@@ -1,10 +1,16 @@
 export const DEFAULT_API_BASE = (process.env.NEXT_PUBLIC_OPSLOOP_API ?? "http://localhost:8000").replace(/\/$/, "");
 const API_KEY = "opsloop.api";
 // Where the start script publishes the backend's current public address (a quick tunnel gets a
-// new URL every time it starts). Empty string turns discovery off.
-const DISCOVERY_URL =
+// new URL every time it starts). The raw file host has no rate limit; the API is the fallback
+// (60 anonymous calls an hour per network). An empty env value turns discovery off.
+const DISCOVERY_URLS = (
   process.env.NEXT_PUBLIC_OPSLOOP_DISCOVERY ??
-  "https://api.github.com/repos/gudalagagan23/OpsLoop/contents/backend.json?ref=backend-url";
+  "https://raw.githubusercontent.com/gudalagagan23/OpsLoop/backend-url/backend.json," +
+    "https://api.github.com/repos/gudalagagan23/OpsLoop/contents/backend.json?ref=backend-url"
+)
+  .split(",")
+  .map((u) => u.trim())
+  .filter(Boolean);
 let discovered: string | null = null;
 
 /**
@@ -38,20 +44,24 @@ async function healthy(base: string, timeoutMs = 4000): Promise<boolean> {
  * address that no longer answers (yesterday's tunnel). Never throws.
  */
 export async function discoverBackend(): Promise<void> {
-  if (DISCOVERY_URL) {
+  for (const source of DISCOVERY_URLS) {
     try {
-      const res = await fetch(DISCOVERY_URL, {
+      const api = source.includes("api.github.com");
+      // A timestamp keeps the raw host's 5-minute cache from serving yesterday's address.
+      const url = api ? source : `${source}${source.includes("?") ? "&" : "?"}t=${Date.now()}`;
+      const res = await fetch(url, {
         cache: "no-store",
-        headers: { Accept: "application/vnd.github.raw+json" },
+        headers: api ? { Accept: "application/vnd.github.raw+json" } : undefined,
       });
-      if (res.ok) {
-        const body = (await res.json()) as { url?: string };
-        if (body.url && /^https:\/\/[^/]+$/.test(body.url.replace(/\/$/, ""))) {
-          discovered = body.url.replace(/\/$/, "");
-        }
+      if (!res.ok) continue;
+      const body = (await res.json()) as { url?: string };
+      const found = body.url?.replace(/\/$/, "");
+      if (found && /^https:\/\/[^/]+$/.test(found)) {
+        discovered = found;
+        break;
       }
     } catch {
-      /* offline or rate-limited: fall back to the build-time address */
+      /* offline or rate-limited: try the next source, then the build-time address */
     }
   }
   let saved: string | null = null;
