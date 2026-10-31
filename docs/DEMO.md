@@ -29,6 +29,12 @@ The script:
 
 Leave its window open. Closing it stops the watching. To stop everything: `docker compose down`.
 
+Docker Desktop on this laptop sometimes fails to start because it cannot remove socket files
+from its previous run (its error dialog offers "Reset to factory defaults": don't). The start
+script handles this: it moves those folders aside before starting Docker, and if Docker's
+backend still crashes it quits Docker and retries once. Don't accept a Docker Desktop
+"Update and restart" prompt right before presenting: the restart stops every container.
+
 If publishing fails (no git credentials), the window prints the tunnel address. Paste it into the
 dashboard under **Sign in → OpsLoop API address → Test & connect**.
 

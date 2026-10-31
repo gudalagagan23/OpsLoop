@@ -59,17 +59,66 @@ function Test-Docker {
     return $LASTEXITCODE -eq 0
 }
 
+$DockerExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+$DockerProcs = @("Docker Desktop", "com.docker.backend", "com.docker.build")
+
+function Clear-StaleDockerSockets {
+    # On this machine Docker Desktop leaves socket files behind that it cannot remove on its next
+    # start, and its backend then crashes ("listening on unix://...: remove ..."). Moving their
+    # folders aside lets Docker recreate them. Only done while Docker is not running.
+    if (Get-Process $DockerProcs -ErrorAction SilentlyContinue) { return }
+    $stamp = Get-Date -Format "yyyyMMddHHmmss"
+    foreach ($p in @("$env:LOCALAPPDATA\Docker\run", "$env:LOCALAPPDATA\docker-secrets-engine")) {
+        if (Test-Path $p) {
+            try {
+                Rename-Item $p ((Split-Path $p -Leaf) + ".stale-$stamp") -ErrorAction Stop
+                Say "Moved aside stale Docker sockets: $p"
+            } catch {
+                Say "Could not move ${p}: $($_.Exception.Message)" "Yellow"
+            }
+        }
+    }
+}
+
+function Test-DockerCrashed {
+    # True when Docker's backend logged a crash after its current process started.
+    $proc = Get-Process "com.docker.backend" -ErrorAction SilentlyContinue | Sort-Object StartTime | Select-Object -First 1
+    if (-not $proc) { return $false }
+    $log = Get-ChildItem "$env:LOCALAPPDATA\Docker\log\host" -Filter "com.docker.backend*.log" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $log) { return $false }
+    $line = Get-Content $log.FullName -Tail 300 -ErrorAction SilentlyContinue |
+        Select-String "backend crashed" | Select-Object -Last 1
+    if (-not $line) { return $false }
+    $m = [regex]::Match($line.Line, "^\[([0-9T:\.\-]+)Z\]")
+    if (-not $m.Success) { return $false }
+    $at = [datetime]::Parse($m.Groups[1].Value, [Globalization.CultureInfo]::InvariantCulture)
+    return $at -gt $proc.StartTime.ToUniversalTime()
+}
+
 function Start-DockerDesktop {
     if (Test-Docker) { return $true }
-    $exe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-    if (-not (Test-Path $exe)) { Say "Docker Desktop is not installed." "Red"; return $false }
-    Say "Starting Docker Desktop..." "Yellow"
-    Start-Process $exe | Out-Null
-    for ($i = 0; $i -lt 90; $i++) {
-        Start-Sleep -Seconds 2
-        if (Test-Docker) { Say "Docker is running." "Green"; return $true }
+    if (-not (Test-Path $DockerExe)) { Say "Docker Desktop is not installed." "Red"; return $false }
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        if (-not (Get-Process "Docker Desktop" -ErrorAction SilentlyContinue)) {
+            Clear-StaleDockerSockets
+            Say "Starting Docker Desktop..." "Yellow"
+            Start-Process $DockerExe | Out-Null
+        } else {
+            Say "Waiting for Docker Desktop's engine..." "Yellow"
+        }
+        for ($i = 0; $i -lt 75; $i++) {
+            Start-Sleep -Seconds 2
+            if (Test-Docker) { Say "Docker is running." "Green"; return $true }
+            if (Test-DockerCrashed) { Say "Docker Desktop's backend crashed on start." "Yellow"; break }
+        }
+        if ($attempt -eq 1) {
+            Say "Restarting Docker Desktop with fresh socket folders..." "Yellow"
+            Get-Process $DockerProcs -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 5
+        }
     }
-    Say "Docker did not start within 3 minutes. Open Docker Desktop and run this again." "Red"
+    Say "Docker did not start. Open Docker Desktop, read its message, then run this again." "Red"
     return $false
 }
 
