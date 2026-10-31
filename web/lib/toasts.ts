@@ -19,6 +19,7 @@ const STATE_TOASTS: Record<string, [string, ToastTone]> = {
   INVESTIGATING: ["Investigator started", "info"],
   FIXING: ["Coding agent is writing a fix", "info"],
   VALIDATING: ["Fix is being validated in the sandbox", "info"],
+  APPROVED: ["Approved: the staged release starts now", "good"],
   DEPLOYING: ["Staged rollout started", "info"],
   VERIFYING: ["Judge is verifying the release", "info"],
   ESCALATED: ["Escalated to a human", "alert"],
@@ -48,6 +49,13 @@ export function toastFor(e: StreamEvent): Toast | null {
     title = "Approval needed";
     tone = "approval";
     action = "Review now";
+  } else if (e.kind === "release_progress" && e.reason) {
+    title = `Release: ${e.reason}`;
+    tone = /rolled back/i.test(e.reason) ? "alert" : "info";
+    action = "Watch";
+  } else if (e.kind === "learned") {
+    title = "Learner added this fix to the knowledge base";
+    tone = "good";
   } else if (e.kind === "severity_changed") {
     title = `Severity now ${inc.severity}`;
     tone = "alert";

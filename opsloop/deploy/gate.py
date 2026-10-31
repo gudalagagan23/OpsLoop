@@ -56,17 +56,22 @@ def bad_patch() -> str:
 
 
 class Traffic:
-    """Steady user traffic through the router: mostly task lists, one create in six."""
+    """Steady user traffic through the router: mostly task lists, one create in six.
 
-    def __init__(self, token: str, rps: float = 12.0) -> None:
+    Several workers share the rate, so one slow upstream (a pool that times out) does not
+    starve the requests that would have gone to the other side."""
+
+    def __init__(self, token: str, rps: float = 12.0, workers: int = 1) -> None:
         self.headers = {"Authorization": f"Bearer {token}"}
-        self.rps = rps
+        self.rps = rps / workers
         self.stop = threading.Event()
         self.sent = 0
-        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.threads = [
+            threading.Thread(target=self._run, args=(7 + i,), daemon=True) for i in range(workers)
+        ]
 
-    def _run(self) -> None:
-        rng = random.Random(7)  # noqa: S311 - load shape, not security
+    def _run(self, seed: int = 7) -> None:
+        rng = random.Random(seed)  # noqa: S311 - load shape, not security
         with httpx.Client(base_url=f"http://127.0.0.1:{ROUTER_PORT}", timeout=10) as c:
             try:
                 project = c.get("/projects", headers=self.headers).json()[0]["id"]
@@ -93,11 +98,13 @@ class Traffic:
                 self.stop.wait(1 / self.rps)
 
     def start(self) -> None:
-        self.thread.start()
+        for t in self.threads:
+            t.start()
 
     def halt(self) -> None:
         self.stop.set()
-        self.thread.join(timeout=10)
+        for t in self.threads:
+            t.join(timeout=10)
 
 
 def start_router(split: Split) -> uvicorn.Server:

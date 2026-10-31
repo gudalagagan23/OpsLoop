@@ -89,7 +89,9 @@ export function Releases() {
                 INC-{String(o.incident_id).padStart(5, "0")}
               </Link>
               <span className="tag">{o.mode}</span>
-              <span>{o.summary}</span>
+              <span className="muted small">
+                {o.summary?.rollout === "rolled_back" ? `rolled back at ${o.summary.stage_reached ?? 0}%` : `${o.summary?.candidate_samples ?? 0} requests measured on the fix`}
+              </span>
               <span className="muted small">{ago(o.created_at, now)} ago</span>
               {o.explanation && <p className="muted small verdict-why">{o.explanation}</p>}
             </li>

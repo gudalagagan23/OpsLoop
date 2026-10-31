@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { postJson, WING_LABEL, type Fault } from "@/lib/api";
 import { useAuth } from "./Auth";
@@ -17,6 +18,7 @@ const EXPECT: Record<string, string> = {
 export function Simulation() {
   const { data, error, reload } = useApi<Fault[]>("/simulation/faults", 5000);
   const { me, token } = useAuth();
+  const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const canAct = me?.role === "approver";
@@ -25,7 +27,11 @@ export function Simulation() {
     setBusy(label);
     setMsg(null);
     try {
-      await postJson(path, {}, token);
+      const res = await postJson<{ incident_id?: number }>(path, {}, token);
+      if (res.incident_id) {
+        router.push(`/incidents/${res.incident_id}`);
+        return;
+      }
       setMsg({ ok: true, text: `${label}: done. Watch the Command Center and the corner pop-ups.` });
       reload();
     } catch (e) {
@@ -85,6 +91,27 @@ export function Simulation() {
         ))}
       </div>
 
+      <section className="panel drill">
+        <div className="panel-head">
+          <h2>
+            <Icon name="rocket" /> Bad-release drill
+          </h2>
+          <button
+            className="btn reject"
+            disabled={!canAct || busy !== null}
+            onClick={() => act("/simulation/bad-release-drill", "Bad-release drill")}
+          >
+            <Icon name="play" /> Ship a known-bad build
+          </button>
+        </div>
+        <p className="muted small">
+          Releases a build that breaks task creation (POST /tasks returns 500) through the real staged
+          rollout. Watch it go to 5%, then 25%, and get rolled back automatically when its error rate
+          rises above stable. The Judge records UNSUCCESSFUL. Takes about two minutes. You are recorded
+          as the approver of the drill.
+        </p>
+      </section>
+
       <section className="panel">
         <h2>
           <Icon name="spark" /> What happens after you inject a fault
@@ -102,7 +129,15 @@ export function Simulation() {
             </Link>{" "}
             page.
           </li>
+          <li>
+            Approve it: the fix goes 5% → 25% → 100% of traffic, is promoted, and the Judge gives its
+            verdict. A RESOLVED fix is added to the knowledge base by the Learner.
+          </li>
         </ol>
+        <p className="muted small">
+          Tip: close any open incident first (approve or reject it). A new fault in a related service is
+          correlated into an incident that is still open instead of opening a new one.
+        </p>
       </section>
     </div>
   );

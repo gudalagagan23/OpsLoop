@@ -93,6 +93,8 @@ class Settings(BaseSettings):
 
     escalation_confidence: float = 0.6
     approval_ttl_s: float = 3600
+    release_soak_s: float = 40.0  # per rollout stage (5%, 25%, 100%)
+    release_verify_s: float = 150.0  # wait for the incident's signals to clear after promotion
 
 
 @lru_cache

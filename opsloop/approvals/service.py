@@ -116,6 +116,14 @@ def approve(
     mgr.transition(
         inc, "APPROVED", actor=f"human:{approver}", reason=f"approved {version_hash[:12]}"
     )
+    # The release (staged rollout, then the Judge) runs in the worker, for this exact version.
+    jobs.enqueue(
+        session,
+        "release",
+        {"incident_id": incident_id, "version_hash": version_hash},
+        idempotency_key=f"release:{incident_id}:{version_hash[:16]}",
+        max_attempts=1,  # a half-run rollout is not retried blindly: a human looks first
+    )
     return row
 
 

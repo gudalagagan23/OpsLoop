@@ -83,7 +83,7 @@ def test_agents_lists_every_component_with_an_honest_status(client: TestClient) 
         keys
     )
     learner = next(c for c in body["components"] if c["key"] == "learner")
-    assert learner["status"] == "planned"
+    assert "fixes learned" in learner["detail"]
     assert all(
         c["status"] in {"active", "ready", "working", "waiting", "planned", "down"}
         for c in body["components"]

@@ -389,7 +389,18 @@ def agents(db: Db) -> dict[str, Any]:
     test_last = _last(db, TestRun.created_at)
     approval_last = _last(db, Approval.created_at)
     deploys = db.execute(select(func.count()).select_from(Deployment)).scalar_one()
+    rollbacks = db.execute(
+        select(func.count()).select_from(Deployment).where(Deployment.state == "rolled_back")
+    ).scalar_one()
+    deploy_last = _last(db, Deployment.started_at)
     outcomes = db.execute(select(func.count()).select_from(Outcome)).scalar_one()
+    outcome_last = _last(db, Outcome.created_at)
+    learned = db.execute(
+        select(func.count())
+        .select_from(KnowledgeChunk)
+        .where(KnowledgeChunk.kind == "past_incident")
+    ).scalar_one()
+    learned_last = _last(db, KnowledgeChunk.created_at, KnowledgeChunk.kind == "past_incident")
     chunks = db.execute(select(func.count()).select_from(KnowledgeChunk)).scalar_one()
     entries = db.execute(select(func.count()).select_from(Evidence)).scalar_one()
     stale = newest_beat is None or (_now() - newest_beat).total_seconds() > 30
@@ -488,22 +499,26 @@ def agents(db: Db) -> dict[str, Any]:
             "deploy",
             "Deployment controller",
             "5% -> 25% -> 100% with auto-rollback",
-            "ready",
-            f"{deploys} live releases (gate-tested separately)",
+            "working" if working_on.get("release") else _status(deploy_last),
+            f"{deploys} releases, {rollbacks} rolled back",
+            deploy_last,
+            working_on=working_on.get("release"),
         ),
         comp(
             "judge",
             "Judge",
             "Verdict from measured evidence",
-            "ready",
+            _status(outcome_last),
             f"{outcomes} verdicts recorded",
+            outcome_last,
         ),
         comp(
             "learner",
             "Learner",
-            "Improve thresholds and knowledge from outcomes",
-            "planned",
-            "Stage 4",
+            "Resolved fixes become knowledge; threshold tuning next",
+            _status(learned_last),
+            f"{learned} fixes learned",
+            learned_last,
         ),
     ]
     return {

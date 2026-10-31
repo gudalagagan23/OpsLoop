@@ -7,6 +7,7 @@ const STATE_TEXT: Record<string, string> = {
   FIXING: "fix in progress",
   VALIDATING: "validating in sandbox",
   AWAITING_APPROVAL: "waiting for human approval",
+  APPROVED: "approved by a human; release queued",
   DEPLOYING: "staged rollout",
   VERIFYING: "Judge verifying",
   RESOLVED: "resolved",
@@ -25,6 +26,10 @@ export function describe(a: ActivityRow): string {
       return "Incident opened";
     case "signal_attached":
       return "New signal correlated";
+    case "release_progress":
+      return a.reason ? `Release: ${a.reason}` : "Release progress";
+    case "learned":
+      return "Learner added the fix to the knowledge base";
     case "signal_escalated":
       return "Stronger signal raised the severity";
     case "severity_changed":
@@ -37,7 +42,9 @@ export function describe(a: ActivityRow): string {
     case "approval":
       return "Fix approved";
     case "state_change":
-      return a.to_state ? (STATE_TEXT[a.to_state] ?? a.to_state.replaceAll("_", " ").toLowerCase()) : "state changed";
+      return a.to_state
+        ? (STATE_TEXT[a.to_state] ?? a.to_state.replaceAll("_", " ").toLowerCase())
+        : "state changed";
     default:
       return a.kind.replaceAll("_", " ");
   }
@@ -46,7 +53,8 @@ export function describe(a: ActivityRow): string {
 export function toneOf(a: ActivityRow): "bad" | "good" | "warn" | "info" {
   if (a.kind === "opened" || a.to_state === "ESCALATED" || a.to_state === "ROLLED_BACK") return "bad";
   if (a.kind === "approval_requested" || a.to_state === "AWAITING_APPROVAL") return "warn";
-  if (a.to_state === "RESOLVED" || a.to_state === "DISMISSED") return "good";
+  if (a.to_state === "RESOLVED" || a.to_state === "DISMISSED" || a.kind === "learned") return "good";
+  if (a.kind === "release_progress" && /rolled back/i.test(a.reason ?? "")) return "bad";
   return "info";
 }
 
@@ -63,4 +71,7 @@ export const ACTOR_LABEL: Record<string, string> = {
   operator: "Operator",
   judge: "Judge",
   deploy: "Deployment",
+  deployment: "Deployment controller",
+  learner: "Learner",
+  "verification-run": "Verification run",
 };

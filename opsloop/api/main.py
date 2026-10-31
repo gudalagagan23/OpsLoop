@@ -24,9 +24,11 @@ from opsloop.core import ledger
 from opsloop.core.config import get_settings
 from opsloop.core.db import DatabaseStatus, check_database
 from opsloop.core.models import (
+    Deployment,
     Evidence,
     Incident,
     IncidentEvent,
+    Outcome,
     RemediationAttempt,
     Report,
     Signal,
@@ -117,8 +119,42 @@ def incident_detail(incident_id: int, db: Db) -> dict[str, Any]:
         .where(RemediationAttempt.incident_id == incident_id)
         .order_by(RemediationAttempt.attempt_no)
     ).scalars()
+    deployments = db.execute(
+        select(Deployment).where(Deployment.incident_id == incident_id).order_by(Deployment.id)
+    ).scalars()
+    outcome = (
+        db.execute(
+            select(Outcome).where(Outcome.incident_id == incident_id).order_by(Outcome.id.desc())
+        )
+        .scalars()
+        .first()
+    )
     return {
         **incident_summary(inc),
+        "release": {
+            "deployments": [
+                {
+                    "id": d.id,
+                    "version_hash": d.version_hash,
+                    "state": d.state,
+                    "stage_pct": d.stage_pct,
+                    "started_at": _iso(d.started_at),
+                    "finished_at": _iso(d.finished_at),
+                    "reasons": d.reasons,
+                    "events": d.stage_log.get("events", []),
+                }
+                for d in deployments
+            ],
+            "outcome": None
+            if outcome is None
+            else {
+                "verdict": outcome.verdict,
+                "mode": outcome.mode,
+                "summary": outcome.summary,
+                "explanation": outcome.explanation,
+                "created_at": _iso(outcome.created_at),
+            },
+        },
         "report2": None
         if report2 is None
         else {
@@ -426,3 +462,15 @@ def simulation_toggle(
 @app.post("/simulation/reset")
 def simulation_reset(_user: Annotated[User, Depends(require_approver)]) -> Any:
     return _control("POST", "/faults/reset")
+
+
+@app.post("/simulation/bad-release-drill")
+def bad_release_drill(db: Db, user: Annotated[User, Depends(require_approver)]) -> dict[str, Any]:
+    """Ship a known-bad build (task creation returns 500) through the real staged rollout, to
+    watch the automatic rollback. The approver who starts the drill is recorded as approving it."""
+    from opsloop.deploy.gate import bad_patch
+    from opsloop.deploy.release import start_bad_release_drill
+
+    incident_id = start_bad_release_drill(db, user.name, bad_patch())
+    db.commit()
+    return {"incident_id": incident_id}

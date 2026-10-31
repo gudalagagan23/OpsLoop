@@ -349,6 +349,13 @@ class IncidentManager:
             incident.closed_at = self.now()
             incident.closed_reason = reason
 
+    def note(
+        self, incident: Incident, kind: str, *, actor: str, reason: str, evidence_id: int | None
+    ) -> None:
+        """A timeline event that is not a state change (it still reaches the live stream)."""
+        self._event(incident, kind, actor, reason, evidence_id)
+        incident.updated_at = self.now()
+
     def _event(
         self,
         incident: Incident,

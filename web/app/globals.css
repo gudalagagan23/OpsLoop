@@ -1746,6 +1746,110 @@ td.wrap {
   background: var(--text);
 }
 
+.rollout-bar.big {
+  height: 14px;
+  border-radius: 7px;
+  margin: 8px 0 30px;
+}
+
+.rollout-bar.big span {
+  border-radius: 7px;
+}
+
+.rollout-bar.running span {
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #fff));
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+.rollout-bar.done span {
+  background: var(--ok);
+}
+
+.rollout-bar.bad span {
+  background: var(--bad);
+}
+
+.rollout-bar.big i {
+  top: -3px;
+  height: 20px;
+}
+
+.rollout-bar i b {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.rollout-bar i:last-child b {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.rollout-events {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+}
+
+.rollout-events .ev-rolled_back {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.rollout-events .ev-promoted {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.verdict-box {
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border-left: 4px solid var(--vc, var(--accent));
+}
+
+.verdict-box.v-ok {
+  --vc: var(--ok);
+}
+
+.verdict-box.v-warn {
+  --vc: var(--warn);
+}
+
+.verdict-box.v-bad {
+  --vc: var(--bad);
+}
+
+.verdict-box p {
+  margin: 6px 0;
+}
+
+.verdict-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.verdict-title > svg {
+  color: var(--vc, var(--accent));
+}
+
+.verdict-title strong {
+  font-size: 18px;
+  color: var(--vc, var(--text));
+}
+
 .verdicts li {
   display: flex;
   gap: 10px;

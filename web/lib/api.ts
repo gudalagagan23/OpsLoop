@@ -168,6 +168,43 @@ export type IncidentDetail = IncidentSummary & {
   report2: { body: Report2; version: number; created_at: string } | null;
   attempts: Attempt[];
   approval: ApprovalInfo;
+  release?: ReleaseInfo;
+};
+
+export type RolloutEvent = {
+  t: number;
+  event: string;
+  pct: number;
+  reasons?: string[];
+  candidate_n?: number;
+  candidate_error_rate?: number | null;
+  candidate_p95_ms?: number | null;
+};
+
+export type ReleaseInfo = {
+  deployments: {
+    id: number;
+    version_hash: string;
+    state: string;
+    stage_pct: number;
+    started_at: string;
+    finished_at: string | null;
+    reasons: { reasons?: string[]; rollback_seconds?: number | null };
+    events: RolloutEvent[];
+  }[];
+  outcome: {
+    verdict: string;
+    mode: string;
+    summary: {
+      target?: { metric: string; op: string; value: number };
+      effects?: { metric: string; control: number | null; candidate: number | null; ci_low: number | null; ci_high: number | null }[];
+      gap_closed?: number | null;
+      candidate_samples?: number;
+      stage_values?: Record<string, number | null>;
+    };
+    explanation: string | null;
+    created_at: string;
+  } | null;
 };
 
 export type WatcherStatus = {
@@ -369,7 +406,7 @@ export type Releases = {
     incident_id: number;
     verdict: string;
     mode: string;
-    summary: string | null;
+    summary: { candidate_samples?: number; stage_reached?: number; rollout?: string } | null;
     explanation: string | null;
     created_at: string;
   }[];

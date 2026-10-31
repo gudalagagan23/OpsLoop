@@ -139,8 +139,9 @@ def test_with_a_model_investigation_queues_remediation(sessions: sessionmaker[Se
         assert job.queue == "remediate" and job.payload["incident_id"] == inc_id
 
 
-def test_dispatch_has_the_three_queues(sessions: sessionmaker[Session]) -> None:
-    assert set(dispatch(_ctx(sessions, None))) == {"investigate", "remediate", "validate"}
+def test_dispatch_has_the_four_queues(sessions: sessionmaker[Session]) -> None:
+    queues = {"investigate", "remediate", "validate", "release"}
+    assert set(dispatch(_ctx(sessions, None))) == queues
 
 
 def _awaiting_with_human_patch(sessions: sessionmaker[Session]) -> tuple[int, int]:

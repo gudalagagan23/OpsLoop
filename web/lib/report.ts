@@ -1,3 +1,4 @@
+import { eventText, fmtMetric } from "@/components/ReleasePanel";
 import { WING_LABEL, type IncidentDetail } from "./api";
 
 const line = (k: string, v: unknown) => `| ${k} | ${String(v ?? "–").replaceAll("|", "\\|").replaceAll("\n", " ")} |`;
@@ -85,6 +86,31 @@ export function incidentMarkdown(inc: IncidentDetail): string {
     out.push(`- ${d.created_at}: **${d.decision}** by ${d.approver} for \`${d.version_hash.slice(0, 16)}\`${d.reason ? `: ${d.reason}` : ""}`),
   );
   out.push("");
+
+  out.push("## Release and verdict", "");
+  const rel = inc.release;
+  if (!rel || (rel.deployments.length === 0 && !rel.outcome)) out.push("_Not released yet._", "");
+  rel?.deployments.forEach((d) => {
+    out.push(
+      `Staged rollout of \`${d.version_hash.slice(0, 16)}\`: **${d.state}**, reached ${d.stage_pct}% (started ${d.started_at}).`,
+      "",
+      ...d.events.map((e) => `- ${new Date(e.t * 1000).toISOString()}: ${eventText(e)}`),
+      "",
+    );
+  });
+  if (rel?.outcome) {
+    const o = rel.outcome;
+    out.push(`**Judge verdict: ${o.verdict}** (${o.mode}). ${o.explanation ?? ""}`, "");
+    if (o.summary.effects?.length) {
+      out.push("| Metric | Control | Fix | 95% CI of improvement |", "|---|---|---|---|");
+      o.summary.effects.forEach((e) =>
+        out.push(
+          `| ${e.metric} | ${fmtMetric(e.metric, e.control)} | ${fmtMetric(e.metric, e.candidate)} | ${e.ci_low === null || e.ci_high === null ? "–" : `${fmtMetric(e.metric, e.ci_low)} to ${fmtMetric(e.metric, e.ci_high)}`} |`,
+        ),
+      );
+      out.push("");
+    }
+  }
 
   out.push("## Timeline", "", "| Time | Event | By | Note |", "|---|---|---|---|");
   inc.events.forEach((e) =>

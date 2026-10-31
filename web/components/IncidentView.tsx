@@ -9,6 +9,7 @@ import { ApprovalDialog, DiffView, Tests } from "./ApprovalDialog";
 import { Icon, WING_ICON } from "./Icon";
 import { useLiveReload } from "./Live";
 import { IncidentStepper } from "./Pipeline";
+import { ReleasePanel } from "./ReleasePanel";
 
 function fmt(v: number | null): string {
   if (v === null || Number.isNaN(v)) return "–";
@@ -260,6 +261,8 @@ export function IncidentView({ id }: { id: number }) {
           )}
         </section>
       )}
+
+      {inc.release && <ReleasePanel release={inc.release} state={inc.state} />}
 
       {inc.approval.decisions.length > 0 && (
         <section className="panel">

@@ -1,4 +1,4 @@
-"""OpsLoop worker: runs queued jobs (investigate, remediate, validate).
+"""OpsLoop worker: runs queued jobs (investigate, remediate, validate, release).
 
 Without OPSLOOP_LLM_MODEL the worker stays in Stage 1 mode: incidents get the stub Report 1
 and nothing is remediated. With a model configured it runs the real pipeline."""
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from opsloop.agents.coding_agent import ApiToolLoopRunner
 from opsloop.agents.investigator import generate_report1_stub, investigate
+from opsloop.agents.learner import learn_from_resolved
 from opsloop.agents.profiles import SpecialistProfile, load_all, specialist_for
 from opsloop.approvals import service as approvals
 from opsloop.core import jobs, ledger
@@ -27,6 +28,7 @@ from opsloop.core.models import (
     RemediationAttempt,
     Report,
 )
+from opsloop.deploy.release import LiveRig, ReleaseConfig, Rig, run_release
 from opsloop.incidents.manager import IncidentManager
 from opsloop.replay.scenario import Scenario
 from opsloop.testloop.loop import validate
@@ -76,6 +78,8 @@ class Context:
     validator: Callable[..., Any] = validate
     profiles: dict[str, SpecialistProfile] = field(default_factory=load_all)
     checkpointer_factory: Callable[[], Any] | None = None
+    rig_factory: Callable[[], Rig] | None = None
+    release_config: ReleaseConfig | None = None
     _embedder: Embedder | None = None
 
     def embedder(self) -> Embedder:
@@ -233,11 +237,33 @@ def handle_validate(ctx: Context, session: Session, payload: dict[str, Any]) -> 
         s.commit()
 
 
+def handle_release(ctx: Context, session: Session, payload: dict[str, Any]) -> None:
+    """Staged rollout of an approved version, the Judge's verdict, then the Learner."""
+    session.commit()  # release locks: the release opens its own sessions
+    settings = ctx.settings
+
+    def learn(incident_id: int) -> None:
+        with ctx.sessions() as s:
+            learn_from_resolved(s, ctx.embedder(), incident_id)
+            s.commit()
+
+    run_release(
+        ctx.sessions,
+        int(payload["incident_id"]),
+        str(payload["version_hash"]),
+        ctx.rig_factory or (lambda: LiveRig(settings.taskflow_control_url)),
+        ctx.release_config
+        or ReleaseConfig(soak_s=settings.release_soak_s, verify_s=settings.release_verify_s),
+        on_resolved=learn,
+    )
+
+
 def dispatch(ctx: Context) -> dict[str, jobs.Handler]:
     return {
         "investigate": lambda s, p: handle_investigate(ctx, s, p),
         "remediate": lambda s, p: handle_remediate(ctx, s, p),
         "validate": lambda s, p: handle_validate(ctx, s, p),
+        "release": lambda s, p: handle_release(ctx, s, p),
     }
 
 
