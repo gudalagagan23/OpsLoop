@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start OpsLoop (stack, worker, public tunnel)",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\scripts\start-opsloop.ps1"],
+      "isBackground": true,
+      "problemMatcher": [],
+      "runOptions": { "runOn": "folderOpen" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": false }
+    }
+  ]
+}

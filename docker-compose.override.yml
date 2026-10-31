@@ -1,0 +1,16 @@
+# Local only (gitignored): run the checked-out source in the existing image instead of rebuilding.
+x-src: &src
+  - ./opsloop:/app/opsloop:ro
+  - ./taskflow:/app/taskflow:ro
+
+services:
+  taskflow-api:
+    volumes: *src
+  traffic-gen:
+    volumes: *src
+  opsloop-engine:
+    volumes: *src
+  opsloop-heartbeat:
+    volumes: *src
+  opsloop-api:
+    volumes: *src

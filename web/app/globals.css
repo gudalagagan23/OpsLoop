@@ -367,6 +367,24 @@ main {
   gap: 10px;
 }
 
+.gate {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.offline-banner {
+  margin-bottom: 16px;
+}
+
+.offline-banner > svg {
+  color: var(--bad);
+  flex-shrink: 0;
+}
+
 .api-setting {
   display: flex;
   flex-direction: column;

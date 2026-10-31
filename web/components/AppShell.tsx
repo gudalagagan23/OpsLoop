@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { apiBase, DEFAULT_API_BASE, setApiBase, type Overview } from "@/lib/api";
+import { apiBase, DEFAULT_API_BASE, discoverBackend, setApiBase, type Overview } from "@/lib/api";
 import { useAuth } from "./Auth";
 import { Icon } from "./Icon";
 import { NotificationList, useLive } from "./Live";
@@ -36,9 +36,21 @@ function isActive(path: string, href: string): boolean {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname() ?? "/";
   const [navOpen, setNavOpen] = useState(false);
-  const { data: overview } = useApi<Overview>("/overview", 15000);
+  const { data: overview, error: overviewError } = useApi<Overview>("/overview", 15000);
+  const offline = Boolean(overviewError);
 
   useEffect(() => setNavOpen(false), [path]);
+
+  // While the backend is unreachable, look for a newly published address and switch to it.
+  useEffect(() => {
+    if (!offline) return;
+    const before = apiBase();
+    const id = setInterval(async () => {
+      await discoverBackend();
+      if (apiBase() !== before) window.location.reload();
+    }, 20000);
+    return () => clearInterval(id);
+  }, [offline]);
 
   return (
     <div className={`shell ${navOpen ? "nav-open" : ""}`}>
@@ -95,7 +107,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Bell />
           <Account />
         </header>
-        <main>{children}</main>
+        <main>
+          {offline && (
+            <div className="banner bad offline-banner" role="alert">
+              <Icon name="alert" size={22} />
+              <div>
+                <strong>The OpsLoop backend is offline.</strong>
+                <span className="muted">
+                  It runs on the host laptop. Start it there with <strong>Start OpsLoop</strong>; this page
+                  reconnects by itself within about 20 seconds.
+                  {overview ? " Figures below are from the last successful update." : ""}
+                </span>
+              </div>
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );

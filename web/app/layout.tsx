@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { AppShell } from "@/components/AppShell";
 import { AuthProvider } from "@/components/Auth";
+import { BackendGate } from "@/components/BackendGate";
 import { LiveProvider } from "@/components/Live";
 import "./globals.css";
 
@@ -22,11 +23,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <AuthProvider>
-          <LiveProvider>
-            <AppShell>{children}</AppShell>
-          </LiveProvider>
-        </AuthProvider>
+        <BackendGate>
+          <AuthProvider>
+            <LiveProvider>
+              <AppShell>{children}</AppShell>
+            </LiveProvider>
+          </AuthProvider>
+        </BackendGate>
       </body>
     </html>
   );

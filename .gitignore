@@ -19,7 +19,8 @@ node_modules/
 !.env.example
 
 # Editors / OS
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 .idea/
 .DS_Store
 Thumbs.db
@@ -41,4 +42,4 @@ web/tsconfig.tsbuildinfo
 
 # Local process logs
 logs/
-docker-compose.override.yml
+

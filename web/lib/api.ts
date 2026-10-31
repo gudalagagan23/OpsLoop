@@ -1,15 +1,71 @@
 export const DEFAULT_API_BASE = (process.env.NEXT_PUBLIC_OPSLOOP_API ?? "http://localhost:8000").replace(/\/$/, "");
 const API_KEY = "opsloop.api";
+// Where the start script publishes the backend's current public address (a quick tunnel gets a
+// new URL every time it starts). Empty string turns discovery off.
+const DISCOVERY_URL =
+  process.env.NEXT_PUBLIC_OPSLOOP_DISCOVERY ??
+  "https://api.github.com/repos/gudalagagan23/OpsLoop/contents/backend.json?ref=backend-url";
+let discovered: string | null = null;
 
 /**
- * The API this browser talks to: an address saved in Settings (a quick tunnel gets a new URL each
- * time it restarts), else the one baked in at build time.
+ * The API this browser talks to: an address saved in Settings, else the one the start script
+ * published, else the one baked in at build time.
  */
 export function apiBase(): string {
+  let saved: string | null = null;
   try {
-    return window.localStorage.getItem(API_KEY) || DEFAULT_API_BASE;
+    saved = window.localStorage.getItem(API_KEY);
   } catch {
-    return DEFAULT_API_BASE;
+    /* storage unavailable */
+  }
+  return saved || discovered || DEFAULT_API_BASE;
+}
+
+async function healthy(base: string, timeoutMs = 4000): Promise<boolean> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    return (await fetch(`${base}/health`, { cache: "no-store", signal: ctl.signal })).ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
+ * Find the backend before anything connects: read the published address, and drop a saved
+ * address that no longer answers (yesterday's tunnel). Never throws.
+ */
+export async function discoverBackend(): Promise<void> {
+  if (DISCOVERY_URL) {
+    try {
+      const res = await fetch(DISCOVERY_URL, {
+        cache: "no-store",
+        headers: { Accept: "application/vnd.github.raw+json" },
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { url?: string };
+        if (body.url && /^https:\/\/[^/]+$/.test(body.url.replace(/\/$/, ""))) {
+          discovered = body.url.replace(/\/$/, "");
+        }
+      }
+    } catch {
+      /* offline or rate-limited: fall back to the build-time address */
+    }
+  }
+  let saved: string | null = null;
+  try {
+    saved = window.localStorage.getItem(API_KEY);
+  } catch {
+    return;
+  }
+  if (saved && saved !== discovered && !(await healthy(saved))) {
+    try {
+      window.localStorage.removeItem(API_KEY);
+    } catch {
+      /* ignore */
+    }
   }
 }
 
